@@ -1,0 +1,28 @@
+;; shadow-cljs configuration
+{:source-paths
+ ["src/main"
+  "src/test"]
+
+ :dependencies
+ [[binaryage/devtools "1.0.2"]
+  [reagent "1.0.0-alpha2"]
+  [data-frisk-reagent "0.4.5"]]
+
+ :open-file-command
+ ["code" "-g" ["%s:%s:%s" :file :line :column]]
+
+ :dev-http {8000 "public"}
+
+ :builds
+ {:app {:target :browser
+        :compiler-options {:infer-externs :auto}
+        :output-dir "public/dist/app"
+        :asset-path "/dist/app"
+        :modules {:main {:init-fn gltf.main/init
+                         :entries [gltf.main]}}}
+
+  :test {:target    :browser-test
+         :test-dir  "public/dist/test"
+         :ns-regexp "-test$"
+         :devtools  {:http-port          8021
+                     :http-root          "public/dist/test"}}}}

@@ -1,0 +1,13 @@
+.canvas-container {
+  position: relative;
+  display: inline-block;
+}
+
+#hud-canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 10;
+  width: 800px;
+  height: 800px;
+}
