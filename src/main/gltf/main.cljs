@@ -18,7 +18,7 @@
                   :velocity [0 0 0]
                   :angular-speed [0 0 0]}
          :buttons #{}
-         :running? true}))
+         :last-frame-time nil}))
 
 (defn- load-model [gltf base-url]
   (-> (gltf.loader/load-gltf gltf base-url)
@@ -42,10 +42,16 @@
     (set-view-matrix!)
     (gl/draw model)))
 
-(defn- update-camera [camera]
+(defn- update-position [pos velocity time]
+  (let [[x y z] pos
+        [dx dy dz] velocity]
+    [(+ x (* dx time))
+     (+ y (* dy time))
+     (+ z (* dz time))]))
+
+(defn- update-camera [camera time]
   (as-> camera camera
-    (let [[vx vy vz] (:velocity camera)]
-      (update camera :position (fn [[x y z]] [(+ x vx) (+ y vy) (+ z vz)])))
+    (update camera :position #(update-position % (:velocity camera) time))
     (let [[dy dp dr] (:angular-speed camera)]
       (-> camera
           (update :yaw #(mod (+ % dy) 360))
@@ -62,7 +68,7 @@
      (swap! game-state assoc :camera))))
 
 (defn- handle-keyboard-input [pressed-buttons]
-  (let [camera-speed 0.05
+  (let [camera-speed 1
         velocity (cond-> [0 0 0]
                    (contains? pressed-buttons "KeyW")
                    (update 2 #(- % camera-speed))
@@ -72,17 +78,19 @@
 
 (defn ^:dev/after-load start []
   (gl/recompile-shaders)
-  (when-not (:running? @game-state)
-    (draw-model))
   (rdom/force-update-all))
 
 (defn ^:dev/before-load stop [])
 
-(defn main-loop []
-  (when (:running? @game-state)
-    (swap! game-state update :camera #(update-camera %))
-    (draw-model)
-    (ui/draw-hud @game-state)
+(defn main-loop [time]
+  (let [time-seconds (/ time 1000)
+        last-frame-time (or (:last-frame-time @game-state) time-seconds)
+        time-delta (- time-seconds last-frame-time)]
+    (when (> time-delta 0)
+      (swap! game-state update :camera #(update-camera % time-delta))
+      (draw-model)
+      (ui/draw-hud @game-state))
+    (swap! game-state assoc :last-frame-time time-seconds)
     (js/requestAnimationFrame main-loop)))
 
 (defn init []
@@ -104,4 +112,4 @@
                                 (when-not (identical? (:model old) (:model new))
                                   (draw-model))))
 
-  (main-loop))
+  (js/requestAnimationFrame main-loop))
