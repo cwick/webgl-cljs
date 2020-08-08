@@ -9,17 +9,20 @@
 
 (defn- on-key-down-impl [e]
   (let [buttons (:buttons @input-state)
-        code (.-code e)]
-    (swap! input-state update :buttons #(conj % code))
+        code (.-code e)
+        new-buttons (conj buttons code)]
+    (swap! input-state assoc :buttons new-buttons)
     (when-let [callback (and (not (contains? buttons code))
                              (get-in @input-state [:callbacks (.-target e) :on-key-down]))]
-      (callback code))))
+      (callback new-buttons code))))
 
 (defn- on-key-up-impl [e]
-  (let [code (.-code e)]
-    (swap! input-state update :buttons #(disj % code))
+  (let [buttons (:buttons @input-state)
+        code (.-code e)
+        new-buttons (disj buttons code)]
+    (swap! input-state assoc :buttons new-buttons)
     (when-let [callback (get-in @input-state [:callbacks (.-target e) :on-key-up])]
-      (callback code))))
+      (callback new-buttons code))))
 
 (defn- on-pointer-lock-change [canvas]
   (fn []

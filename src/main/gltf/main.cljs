@@ -52,25 +52,23 @@
           (update :pitch #(+ % dp))
           (update :roll #(+ % dr))))))
 
-(defn- on-mouse-move [dx dy]
-  (let [sensitivity 0.1]
-    (as-> (:camera @game-state) camera
-      (assoc camera :angular-speed [(* (- dx) sensitivity) (* dy sensitivity) 0])
-      (swap! game-state #(assoc % :camera (update-camera camera))))))
+(defn- handle-mouse-input [dx dy]
+  (let [sensitivity 0.1
+        camera (:camera @game-state)]
+    (->>
+     (-> camera
+         (update :yaw #(+ % (* (- dx) sensitivity)))
+         (update :pitch #(+ % (* dy sensitivity))))
+     (swap! game-state assoc :camera))))
 
-(defn- on-key-down [key]
-  (let [pressed-buttons (conj (:buttons @game-state) key)
-        camera-speed 0.05]
-    (swap! game-state (fn [old-state]
-                        (as-> old-state state
-                          (assoc state :buttons pressed-buttons)
-                          (cond-> state
-                            (contains? pressed-buttons "KeyW")
-                            (update-in [:camera :position 2] #(- % camera-speed))
-                            (contains? pressed-buttons "KeyS")
-                            (update-in [:camera :position 2] #(+ % camera-speed))))))))
-
-(defn- on-key-up [key] (swap! game-state update :buttons #(disj % key)))
+(defn- handle-keyboard-input [pressed-buttons]
+  (let [camera-speed 0.05
+        velocity (cond-> [0 0 0]
+                   (contains? pressed-buttons "KeyW")
+                   (update 2 #(- % camera-speed))
+                   (contains? pressed-buttons "KeyS")
+                   (update 2 #(+ % camera-speed)))]
+    (swap! game-state assoc-in [:camera :velocity] velocity)))
 
 (defn ^:dev/after-load start []
   (gl/recompile-shaders)
@@ -82,6 +80,7 @@
 
 (defn main-loop []
   (when (:running? @game-state)
+    (swap! game-state update :camera #(update-camera %))
     (draw-model)
     (ui/draw-hud @game-state)
     (js/requestAnimationFrame main-loop)))
@@ -96,9 +95,9 @@
         hud-canvas (js/document.getElementById "hud-canvas")]
     (ui/init-hud hud-canvas)
     (input/init hud-canvas)
-    (input/on-mouse-move hud-canvas #'on-mouse-move)
-    (input/on-key-down hud-canvas #'on-key-down)
-    (input/on-key-up hud-canvas #'on-key-up)
+    (input/on-mouse-move hud-canvas #'handle-mouse-input)
+    (input/on-key-down hud-canvas #'handle-keyboard-input)
+    (input/on-key-up hud-canvas #'handle-keyboard-input)
     (gl/init-webgl canvas))
 
   (add-watch app-state :model (fn [_ _ old new]
