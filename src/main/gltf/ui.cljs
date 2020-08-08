@@ -41,19 +41,16 @@
 
 (defn draw-hud [game-state]
   (when-let [ctx @hud-ctx]
-    (let [camera (:camera game-state)
-          [dy dp _] (:angular-speed camera)]
+    (let [camera (:camera game-state)]
       (.clearRect ctx 0 0
                   (-> ctx .-canvas .-width)
                   (-> ctx .-canvas .-height))
       (.fillText ctx (str (:buttons game-state)) 0 0)
-      (.fillText ctx (apply gstring/format "Y:%-+7.2f° P:%-+6.2f° Po:[%.2f %.2f %.2f]"
+      (.fillText ctx (apply gstring/format "Y:%-+7.2f° P:%-+6.2f° T:[%.2f %.2f %.2f]"
                             (:yaw camera)
                             (:pitch camera)
                             (:position camera)) 0 20)
-      (.fillText ctx (apply gstring/format "dY:%+.2f°/s dP:%+.2f°/s dPo:[%.2f %.2f %.2f]"
-                            dy
-                            dp
+      (.fillText ctx (apply gstring/format "dT:[%.2f %.2f %.2f]"
                             (:velocity camera)) 0 40)
 
       (.fillText ctx (apply gstring/format "L:[%.3f %.3f %.3f]"

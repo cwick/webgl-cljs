@@ -5,6 +5,7 @@
                         [gltf.input :as input]
                         [gltf.webgl.core :as gl]
                         [gltf.ui :as ui]
+                        ["gl-matrix/vec3" :as vec3]
                         ["gl-matrix/mat4" :as mat4]
                         ["gl-matrix/quat" :as quat]))
 
@@ -13,11 +14,9 @@
 (defonce game-state
   (atom {:camera {:yaw 0
                   :pitch 0
-                  :roll 0
                   :position [0 0 3.5]
                   :velocity [0 0 0]
-                  :speed 0
-                  :angular-speed [0 0 0]}
+                  :impulse [0 0]}
          :buttons #{}
          :last-frame-time nil}))
 
@@ -34,7 +33,7 @@
 
 (defn- set-view-matrix! []
   (let [camera (:camera @game-state)
-        q (quat/fromEuler (quat/create) (:pitch camera) (- (:yaw camera)) (:roll camera))
+        q (quat/fromEuler (quat/create) (:pitch camera) (- (:yaw camera)) 0)
         matrix (mat4/fromRotationTranslation (mat4/create) q (clj->js (-> @game-state :camera :position)))]
     (gl/set-view-matrix! (mat4/invert (mat4/create) matrix))))
 
@@ -44,53 +43,46 @@
     (gl/draw model)))
 
 (defn- update-position [pos velocity time]
-  (let [[x y z] pos
-        [dx dy dz] velocity]
-    [(+ x (* dx time))
-     (+ y (* dy time))
-     (+ z (* dz time))]))
-
-(defn- to-radians [degrees]
-  (* degrees (/ js/Math.PI 180)))
+  (let [[x y z] pos]
+    [(+ x (* (aget velocity 0) time))
+     (+ y (* (aget velocity 1) time))
+     (+ z (* (aget velocity 2) time))]))
 
 (defn- update-camera [camera time]
-  (as-> camera camera
-
-    (let [[dy dp dr] (:angular-speed camera)]
-      (-> camera
-          (update :yaw #(mod (+ % dy) 360))
-          (update :pitch #(+ % dp))
-          (update :roll #(+ % dr))))
-    (let [yaw (to-radians (:yaw camera))
-          pitch (to-radians (:pitch camera))
-          x (* (js/Math.sin yaw) (js/Math.cos pitch))
-          y (js/Math.sin pitch)
-          z (- (* (js/Math.cos yaw) (js/Math.cos pitch)))]
-      (assoc camera :look [x y z]))
-    (let [speed (:speed camera)
-          [lx ly lz] (:look camera)]
-      (assoc camera :velocity [(* speed lx) (* speed ly) (* speed lz)]))
-    (update camera :position #(update-position % (:velocity camera) time))))
+  (let [q (quat/fromEuler (quat/create) (:pitch camera) (- (:yaw camera)) 0)
+        forward (vec3/transformQuat (vec3/create) #js[0 0 -1] q)
+        right (vec3/cross (vec3/create) forward #js[0 1 0])
+        impulse (:impulse camera)
+        forward-velocity (vec3/scale (vec3/create) forward (impulse 0))
+        velocity (vec3/scaleAndAdd (vec3/create) forward-velocity right (impulse 1))]
+    (vec3/normalize velocity velocity)
+    (-> camera
+        (assoc :look forward :velocity velocity)
+        (update :position #(update-position % velocity time)))))
 
 (defn- handle-mouse-input [dx dy]
   (let [sensitivity 0.1
-        camera (:camera @game-state)]
+        camera (:camera @game-state)
+        clamp #(max -90 (min 90 %))]
     (->>
      (-> camera
          (update :yaw #(mod (+ % (* dx sensitivity)) 360))
-         (update :pitch #(+ % (* dy sensitivity))))
+         (update :pitch #(clamp (+ % (* dy sensitivity)))))
      (swap! game-state assoc :camera))))
 
 (defn- handle-keyboard-input [pressed-buttons]
-  (let [camera-speed 1
-        speed (cond-> 0
-                (contains? pressed-buttons "KeyW")
-                (+ camera-speed)
-                (contains? pressed-buttons "KeyS")
-                (- camera-speed))]
+  (let [impulse (cond-> [0 0]
+                  (contains? pressed-buttons "KeyW")
+                  (update 0 inc)
+                  (contains? pressed-buttons "KeyS")
+                  (update 0 dec)
+                  (contains? pressed-buttons "KeyD")
+                  (update 1 inc)
+                  (contains? pressed-buttons "KeyA")
+                  (update 1 dec))]
     (swap! game-state
            #(-> %
-                (assoc-in [:camera :speed] speed)
+                (assoc-in [:camera :impulse] impulse)
                 (assoc :buttons pressed-buttons)))))
 
 (defn ^:dev/after-load start []
