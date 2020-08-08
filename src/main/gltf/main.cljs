@@ -33,7 +33,7 @@
 
 (defn- set-view-matrix! []
   (let [camera (:camera @game-state)
-        q (quat/fromEuler (quat/create) (:pitch camera) (:yaw camera) 0)
+        q (quat/fromEuler (quat/create) (:pitch camera) (- (:yaw camera)) 0)
         matrix (mat4/fromRotationTranslation (mat4/create) q (clj->js (-> @game-state :camera :position)))]
     (gl/set-view-matrix! (mat4/invert (mat4/create) matrix))))
 
@@ -48,7 +48,7 @@
       (update camera :position (fn [[x y z]] [(+ x vx) (+ y vy) (+ z vz)])))
     (let [[dy dp dr] (:angular-speed camera)]
       (-> camera
-          (update :yaw #(+ % dy))
+          (update :yaw #(mod (+ % dy) 360))
           (update :pitch #(+ % dp))
           (update :roll #(+ % dr))))))
 
@@ -57,7 +57,7 @@
         camera (:camera @game-state)]
     (->>
      (-> camera
-         (update :yaw #(+ % (* (- dx) sensitivity)))
+         (update :yaw #(mod (+ % (* dx sensitivity)) 360))
          (update :pitch #(+ % (* dy sensitivity))))
      (swap! game-state assoc :camera))))
 
