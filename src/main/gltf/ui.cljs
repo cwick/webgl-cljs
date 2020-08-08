@@ -54,4 +54,7 @@
       (.fillText ctx (apply gstring/format "dY:%+.2f°/s dP:%+.2f°/s dPo:[%.2f %.2f %.2f]"
                             dy
                             dp
-                            (:velocity camera)) 0 40))))
+                            (:velocity camera)) 0 40)
+
+      (.fillText ctx (apply gstring/format "L:[%.3f %.3f %.3f]"
+                            (:look camera)) 0 60))))

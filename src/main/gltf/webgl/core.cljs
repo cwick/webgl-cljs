@@ -77,7 +77,6 @@
         view (.getUniformLocation gl program "u_view")]
     (.uniformMatrix4fv gl transform false (mat4/create))
     (.uniformMatrix4fv gl view false (:view-matrix @gl-state (mat4/create)))
-    (.uniformMatrix4fv gl projection false (mat4/create))
     (.uniformMatrix4fv gl projection false
                        (mat4/perspective
                         (mat4/create)
@@ -104,7 +103,6 @@
       (.drawArrays gl (.-TRIANGLES gl) 0 (* 3 100)))))
 
 (defn- draw-mesh [gl mesh]
-  (bind-uniforms gl)
   (doseq [p (:primitives mesh)]
     (draw-primitive gl p)))
 
@@ -133,6 +131,7 @@
     (when-not (identical? scene (:scene @gl-state))
       (swap! gl-state setup-new-scene gl scene))
     (.clear gl (bit-or (.-DEPTH_BUFFER_BIT gl) (.-COLOR_BUFFER_BIT gl)))
+    (bind-uniforms gl)
     (doseq [node (:nodes scene)]
       (draw-node gl node))))
 

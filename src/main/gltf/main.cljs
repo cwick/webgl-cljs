@@ -16,6 +16,7 @@
                   :roll 0
                   :position [0 0 3.5]
                   :velocity [0 0 0]
+                  :speed 0
                   :angular-speed [0 0 0]}
          :buttons #{}
          :last-frame-time nil}))
@@ -33,7 +34,7 @@
 
 (defn- set-view-matrix! []
   (let [camera (:camera @game-state)
-        q (quat/fromEuler (quat/create) (:pitch camera) (- (:yaw camera)) 0)
+        q (quat/fromEuler (quat/create) (:pitch camera) (- (:yaw camera)) (:roll camera))
         matrix (mat4/fromRotationTranslation (mat4/create) q (clj->js (-> @game-state :camera :position)))]
     (gl/set-view-matrix! (mat4/invert (mat4/create) matrix))))
 
@@ -49,14 +50,27 @@
      (+ y (* dy time))
      (+ z (* dz time))]))
 
+(defn- to-radians [degrees]
+  (* degrees (/ js/Math.PI 180)))
+
 (defn- update-camera [camera time]
   (as-> camera camera
-    (update camera :position #(update-position % (:velocity camera) time))
+
     (let [[dy dp dr] (:angular-speed camera)]
       (-> camera
           (update :yaw #(mod (+ % dy) 360))
           (update :pitch #(+ % dp))
-          (update :roll #(+ % dr))))))
+          (update :roll #(+ % dr))))
+    (let [yaw (to-radians (:yaw camera))
+          pitch (to-radians (:pitch camera))
+          x (* (js/Math.sin yaw) (js/Math.cos pitch))
+          y (js/Math.sin pitch)
+          z (- (* (js/Math.cos yaw) (js/Math.cos pitch)))]
+      (assoc camera :look [x y z]))
+    (let [speed (:speed camera)
+          [lx ly lz] (:look camera)]
+      (assoc camera :velocity [(* speed lx) (* speed ly) (* speed lz)]))
+    (update camera :position #(update-position % (:velocity camera) time))))
 
 (defn- handle-mouse-input [dx dy]
   (let [sensitivity 0.1
@@ -69,12 +83,15 @@
 
 (defn- handle-keyboard-input [pressed-buttons]
   (let [camera-speed 1
-        velocity (cond-> [0 0 0]
-                   (contains? pressed-buttons "KeyW")
-                   (update 2 #(- % camera-speed))
-                   (contains? pressed-buttons "KeyS")
-                   (update 2 #(+ % camera-speed)))]
-    (swap! game-state assoc-in [:camera :velocity] velocity)))
+        speed (cond-> 0
+                (contains? pressed-buttons "KeyW")
+                (+ camera-speed)
+                (contains? pressed-buttons "KeyS")
+                (- camera-speed))]
+    (swap! game-state
+           #(-> %
+                (assoc-in [:camera :speed] speed)
+                (assoc :buttons pressed-buttons)))))
 
 (defn ^:dev/after-load start []
   (gl/recompile-shaders)
