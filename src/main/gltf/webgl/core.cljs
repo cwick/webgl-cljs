@@ -1,11 +1,11 @@
 (ns gltf.webgl.core (:require
                      [gltf.webgl.utils :as gl-utils]
                      [gltf.ui :as ui]
-                     ["gl-matrix/mat4" :as mat4]))
+                     [goog.vec.mat4f :as mat4]))
 
 (defonce gl-state (atom nil))
 
-(def identity-matrix (mat4/create))
+(def identity-matrix (mat4/createIdentity))
 
 (defn- init-gl-state [gl]
   (reset! gl-state {:gl gl}))
@@ -75,7 +75,7 @@
         view (gl-utils/get-uniform-location gl gl-state "u_view")]
     (.uniformMatrix4fv gl view false (:view-matrix @gl-state identity-matrix))
     (.uniformMatrix4fv gl projection false
-                       (mat4/perspective
+                       (mat4/makePerspective
                         (mat4/create)
                         (* 50 (/ js/Math.PI 180))
                         1
@@ -124,7 +124,7 @@
 
   ([gl node parent-transform]
    (let [local-transform (or (:matrix node) identity-matrix)
-         global-transform (mat4/multiply (mat4/create) parent-transform local-transform)]
+         global-transform (mat4/multMat parent-transform local-transform (mat4/create))]
      (swap! gl-state update-in [:stats :node-count] inc)
      (when-let [mesh (:mesh node)]
        (set-transform-matrix! gl global-transform)

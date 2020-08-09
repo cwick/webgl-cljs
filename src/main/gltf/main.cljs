@@ -6,7 +6,7 @@
                         [gltf.webgl.core :as gl]
                         [gltf.ui :as ui]
                         [gltf.camera :as camera]
-                        ["gl-matrix/vec2" :as vec2]))
+                        [goog.vec.vec2f :as vec2]))
 
 (defonce app-state (r/atom {}))
 
@@ -57,8 +57,10 @@
           (contains? pressed-buttons "KeyA")
           (update 1 dec))
         camera-speed 20
-        normalized-impulse (vec2/normalize (vec2/create) (clj->js impulse))
-        scaled-impulse (vec2/scale (vec2/create) normalized-impulse camera-speed)]
+        normalized-impulse (if (= impulse [0 0])
+                             #js[0 0]
+                             (vec2/normalize (clj->js impulse) (vec2/create)))
+        scaled-impulse (vec2/scale normalized-impulse camera-speed (vec2/create))]
     (swap! game-state
            #(-> %
                 (assoc-in [:camera :impulse] [(aget scaled-impulse 0) (aget scaled-impulse 1)])
