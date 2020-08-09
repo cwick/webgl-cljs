@@ -5,9 +5,7 @@
                         [gltf.input :as input]
                         [gltf.webgl.core :as gl]
                         [gltf.ui :as ui]
-                        ["gl-matrix/vec3" :as vec3]
-                        ["gl-matrix/mat4" :as mat4]
-                        ["gl-matrix/quat" :as quat]))
+                        [gltf.camera :as camera]))
 
 (defonce app-state (r/atom {}))
 
@@ -31,34 +29,10 @@
     (:gltf @state)
     (:model @state)]])
 
-(defn- set-view-matrix! []
-  (let [camera (:camera @game-state)
-        q (quat/fromEuler (quat/create) (:pitch camera) (- (:yaw camera)) 0)
-        matrix (mat4/fromRotationTranslation (mat4/create) q (clj->js (-> @game-state :camera :position)))]
-    (gl/set-view-matrix! (mat4/invert (mat4/create) matrix))))
-
 (defn- draw-model []
   (when-let [model (:model @app-state)]
-    (set-view-matrix!)
+    (gl/set-view-matrix! (get-in @game-state [:camera :view-matrix]))
     (gl/draw model)))
-
-(defn- update-position [pos velocity time]
-  (let [[x y z] pos]
-    [(+ x (* (aget velocity 0) time))
-     (+ y (* (aget velocity 1) time))
-     (+ z (* (aget velocity 2) time))]))
-
-(defn- update-camera [camera time]
-  (let [q (quat/fromEuler (quat/create) (:pitch camera) (- (:yaw camera)) 0)
-        forward (vec3/transformQuat (vec3/create) #js[0 0 -1] q)
-        right (vec3/cross (vec3/create) forward #js[0 1 0])
-        impulse (:impulse camera)
-        forward-velocity (vec3/scale (vec3/create) forward (impulse 0))
-        velocity (vec3/scaleAndAdd (vec3/create) forward-velocity right (impulse 1))]
-    (vec3/normalize velocity velocity)
-    (-> camera
-        (assoc :look forward :velocity velocity)
-        (update :position #(update-position % velocity time)))))
 
 (defn- handle-mouse-input [dx dy]
   (let [sensitivity 0.1
@@ -96,7 +70,7 @@
         last-frame-time (or (:last-frame-time @game-state) time-seconds)
         time-delta (- time-seconds last-frame-time)]
     (when (> time-delta 0)
-      (swap! game-state update :camera #(update-camera % time-delta))
+      (swap! game-state update :camera #(camera/update-camera % time-delta))
       (draw-model)
       (ui/draw-hud @game-state))
     (swap! game-state assoc :last-frame-time time-seconds)
