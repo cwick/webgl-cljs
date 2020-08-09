@@ -12,7 +12,6 @@
   (let [right (vec3/cross (vec3/create) forward #js[0 1 0])
         forward-velocity (vec3/scale (vec3/create) forward (impulse 0))
         velocity (vec3/scaleAndAdd (vec3/create) forward-velocity right (impulse 1))]
-    (vec3/normalize velocity velocity)
     [(apply-velocity position velocity time) velocity]))
 
 (defn update-camera [camera time]
