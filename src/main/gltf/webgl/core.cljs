@@ -70,12 +70,15 @@
       (bind-vertex-attribute gl (-> primitive :attributes :POSITION) position-attr)
       (swap! gl-state assoc-in [:vertex-arrays primitive] gl-vao))))
 
+(defn- set-transform-matrix! [gl matrix]
+  (let [program (gl-utils/get-gl-program gl gl-state)
+        transform-location (.getUniformLocation gl program "u_transform")]
+    (.uniformMatrix4fv gl transform-location false matrix)))
+
 (defn- bind-uniforms [gl]
   (let [program (gl-utils/get-gl-program gl gl-state)
-        transform (.getUniformLocation gl program "u_transform")
         projection (.getUniformLocation gl program "u_projection")
         view (.getUniformLocation gl program "u_view")]
-    (.uniformMatrix4fv gl transform false (mat4/create))
     (.uniformMatrix4fv gl view false (:view-matrix @gl-state (mat4/create)))
     (.uniformMatrix4fv gl projection false
                        (mat4/perspective
@@ -106,10 +109,19 @@
   (doseq [p (:primitives mesh)]
     (draw-primitive gl p)))
 
-(defn- draw-node [gl node]
-  (when-let [mesh (:mesh node)]
-    (draw-mesh gl mesh))
-  (doseq [child (:children node)] (draw-node gl child)))
+(def identity-matrix (mat4/create))
+
+(defn- draw-node
+  ([gl node]
+   (draw-node gl node identity-matrix))
+
+  ([gl node parent-transform]
+   (let [local-transform (or (:matrix node) identity-matrix)
+         global-transform (mat4/multiply (mat4/create) parent-transform local-transform)]
+     (when-let [mesh (:mesh node)]
+       (set-transform-matrix! gl global-transform)
+       (draw-mesh gl mesh))
+     (doseq [child (:children node)] (draw-node gl child global-transform)))))
 
 (defn- setup-new-scene
   "Free all GL resources and set new scene"

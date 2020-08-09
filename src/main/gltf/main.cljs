@@ -56,7 +56,7 @@
           (update 1 inc)
           (contains? pressed-buttons "KeyA")
           (update 1 dec))
-        camera-speed 5
+        camera-speed 20
         normalized-impulse (vec2/normalize (vec2/create) (clj->js impulse))
         scaled-impulse (vec2/scale (vec2/create) normalized-impulse camera-speed)]
     (swap! game-state

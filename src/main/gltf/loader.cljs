@@ -1,4 +1,6 @@
-(ns gltf.loader (:require [goog.uri.utils :as uri]))
+(ns gltf.loader (:require [goog.uri.utils :as uri]
+                          ["gl-matrix/mat4" :as mat4]
+                          ["gl-matrix/quat" :as quat]))
 
 (defn- load-buffer [buffer base-url]
   (-> (js/fetch (uri/appendPath base-url (:uri buffer)))
@@ -84,20 +86,40 @@
 (defn- resolve-children [data children]
   (map #(resolve-node data %) children))
 
+(defn- get-transformation-matrix [node]
+  ; TRS properties are converted to matrices and postmultiplied in 
+  ; the T * R * S order to compose the transformation matrix; 
+  ; first the scale is applied to the vertices, then the rotation, and then the translation.
+  (let [scale
+        (mat4/fromScaling (mat4/create) (or (clj->js (:scale node)) #js[1 1 1]))
+        rotation-translation
+        (mat4/fromRotationTranslation
+         (mat4/create)
+         (or (clj->js (:rotation node)) (quat/create))
+         (or (clj->js (:translation node)) #js[0 0 0]))]
+    (mat4/multiply (mat4/create) rotation-translation scale)))
+
 (defn- resolve-node [data node-id]
   (let [node (transient (get-in data [:nodes node-id]))]
-    (cond-> node
-      (contains? node :mesh)
-      (assoc! :mesh (resolve-mesh data (:mesh node)))
+    (->
+     (cond-> node
+       (contains? node :mesh)
+       (assoc! :mesh (resolve-mesh data (:mesh node)))
 
-      (contains? node :children)
-      (assoc! :children (resolve-children data (:children node)))
+       (contains? node :children)
+       (assoc! :children (resolve-children data (:children node)))
 
-      (contains? node :camera)
-      (assoc! :camera (resolve-camera data (:camera node)))
+       (contains? node :camera)
+       (assoc! :camera (resolve-camera data (:camera node)))
 
-      :then (assoc! :id node-id)
-      :then (persistent!))))
+       (some #(% node) [:translation :rotation :scale])
+       (assoc! :matrix (get-transformation-matrix node))
+
+       (:matrix node)
+       (assoc! :matrix (apply mat4/fromValues (:matrix node))))
+     (assoc! :id node-id)
+     (dissoc! :translation :rotation :scale)
+     (persistent!))))
 
 (defn- resolve-nodes [data node-ids]
   (map
@@ -111,3 +133,5 @@
 (defn load-gltf [data base-url]
   (-> (load-assets data base-url)
       (.then #(resolve-scene % (:scene data)))))
+
+
