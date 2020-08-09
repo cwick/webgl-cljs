@@ -10,9 +10,9 @@
 (defn- init-gl-state [gl]
   (reset! gl-state {:gl gl}))
 
-(defn- bind-gl-buffer [gl buffer-view target]
+(defn- get-gl-buffer [gl buffer-view target]
   (if-let [gl-buffer (get-in @gl-state [:buffers buffer-view])]
-    (.bindBuffer gl target gl-buffer)
+    gl-buffer
     (let [gl-buffer (.createBuffer gl)]
       (.bindBuffer gl target gl-buffer)
       (.bufferData gl
@@ -21,7 +21,8 @@
                    (.-STATIC_DRAW gl)
                    (:byteOffset buffer-view)
                    (:byteLength buffer-view))
-      (swap! gl-state assoc-in [:buffers buffer-view] gl-buffer))))
+      (swap! gl-state assoc-in [:buffers buffer-view] gl-buffer)
+      gl-buffer)))
 
 (defn init-webgl [canvas]
   (let [gl (.getContext canvas "webgl2")]
@@ -43,7 +44,7 @@
     (.enable gl (.-DEPTH_TEST gl))
     (gl-utils/recompile-shaders gl gl-state)))
 
-(defn- bind-vertex-attribute [gl accessor attribute]
+(defn- bind-vertex-attribute [gl accessor attribute-name]
   (let [component-counts {:SCALAR 1
                           :VEC2 2
                           :VEC3 3
@@ -51,27 +52,19 @@
                           :MAT2 4
                           :MAT3 9
                           :MAT4 16}
-        buffer-view (:bufferView accessor)]
+        buffer-view (:bufferView accessor)
+        program (gl-utils/get-gl-program gl gl-state)
+        attribute-location (.getAttribLocation gl program attribute-name)]
+    (.enableVertexAttribArray gl attribute-location)
     (.vertexAttribPointer
      gl
-     attribute
+     attribute-location
      ((:type accessor) component-counts) ; number of components per vertex attribute
      (goog.object/get gl (name (:componentType accessor))) ; data type of each component
      (:normalized accessor) ; whether integer data values should be normalized into a certain range
      (:byteStride buffer-view) ; stride
      (:byteOffset accessor) ; offset into the buffer
      )))
-
-(defn- bind-vertex-array [gl primitive]
-  (if-let [gl-vao (get-in @gl-state [:vertex-arrays primitive])]
-    (.bindVertexArray gl gl-vao)
-    (let [gl-vao (.createVertexArray gl)
-          program (gl-utils/get-gl-program gl gl-state)
-          position-attr (.getAttribLocation gl program "POSITION")]
-      (.bindVertexArray gl gl-vao)
-      (.enableVertexAttribArray gl position-attr)
-      (bind-vertex-attribute gl (-> primitive :attributes :POSITION) position-attr)
-      (swap! gl-state assoc-in [:vertex-arrays primitive] gl-vao))))
 
 (defn- set-transform-matrix! [gl matrix]
   (let [transform-location (gl-utils/get-uniform-location gl gl-state "u_transform")]
@@ -90,22 +83,35 @@
                         10000))))
 
 (defn- draw-elements [gl primitive]
-  (let [indices (:indices primitive)]
-    (bind-gl-buffer gl (:bufferView indices) (.-ELEMENT_ARRAY_BUFFER gl))
+  (let [indices (:indices primitive)
+        buffer (get-gl-buffer gl (:bufferView indices) (.-ELEMENT_ARRAY_BUFFER gl))]
+    (.bindBuffer gl (.-ELEMENT_ARRAY_BUFFER gl) buffer)
     (.drawElements gl
                    (goog.object/get gl (name (:mode primitive)))
                    (:count indices)
                    (goog.object/get gl (name (:componentType indices)))
                    (:byteOffset indices))))
 
+(defn- bind-vertex-array [gl primitive]
+  (if-let [gl-vao (get-in @gl-state [:vertex-arrays primitive])]
+    (.bindVertexArray gl gl-vao)
+    (let [gl-vao (.createVertexArray gl)
+          position-accessor (-> primitive :attributes :POSITION)
+          vertex-buffer (get-gl-buffer gl (:bufferView position-accessor) (.-ARRAY_BUFFER gl))]
+      (.bindVertexArray gl gl-vao)
+      (.bindBuffer gl (.-ARRAY_BUFFER gl) vertex-buffer)
+      (bind-vertex-attribute gl position-accessor "POSITION")
+      (swap! gl-state assoc-in [:vertex-arrays primitive] gl-vao))))
+
 (defn- draw-primitive [gl primitive]
-  (when-let [position-attribute (get-in primitive [:attributes :POSITION])]
-    (swap! gl-state update-in [:stats :primitive-count] inc)
-    (bind-gl-buffer gl (:bufferView position-attribute) (.-ARRAY_BUFFER gl))
-    (bind-vertex-array gl primitive)
-    (if (:indices primitive)
-      (draw-elements gl primitive)
-      (.drawArrays gl (.-TRIANGLES gl) 0 (* 3 100)))))
+  (swap! gl-state update-in [:stats :primitive-count] inc)
+  (bind-vertex-array gl primitive)
+  (if (:indices primitive)
+    (draw-elements gl primitive)
+    (.drawArrays gl
+                 (goog.object/get gl (name (:mode primitive)))
+                 0
+                 (-> primitive :attributes :POSITION :count))))
 
 (defn- draw-mesh [gl mesh]
   (swap! gl-state update-in [:stats :mesh-count] inc)
