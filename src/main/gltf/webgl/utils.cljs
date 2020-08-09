@@ -87,3 +87,11 @@
       (.linkProgram gl program)
       (validate-program gl program))
     (.useProgram gl program)))
+
+(defn get-uniform-location [gl gl-state uniform]
+  (if-let [location (get-in @gl-state [:uniforms uniform])]
+    location
+    (let [program (get-gl-program gl gl-state)
+          location (.getUniformLocation gl program uniform)]
+      (swap! gl-state assoc-in [:uniforms uniform] location)
+      location)))

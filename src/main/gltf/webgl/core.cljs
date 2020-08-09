@@ -1,8 +1,11 @@
 (ns gltf.webgl.core (:require
                      [gltf.webgl.utils :as gl-utils]
+                     [gltf.ui :as ui]
                      ["gl-matrix/mat4" :as mat4]))
 
 (defonce gl-state (atom nil))
+
+(def identity-matrix (mat4/create))
 
 (defn- init-gl-state [gl]
   (reset! gl-state {:gl gl}))
@@ -71,22 +74,20 @@
       (swap! gl-state assoc-in [:vertex-arrays primitive] gl-vao))))
 
 (defn- set-transform-matrix! [gl matrix]
-  (let [program (gl-utils/get-gl-program gl gl-state)
-        transform-location (.getUniformLocation gl program "u_transform")]
+  (let [transform-location (gl-utils/get-uniform-location gl gl-state "u_transform")]
     (.uniformMatrix4fv gl transform-location false matrix)))
 
 (defn- bind-uniforms [gl]
-  (let [program (gl-utils/get-gl-program gl gl-state)
-        projection (.getUniformLocation gl program "u_projection")
-        view (.getUniformLocation gl program "u_view")]
-    (.uniformMatrix4fv gl view false (:view-matrix @gl-state (mat4/create)))
+  (let [projection (gl-utils/get-uniform-location gl gl-state "u_projection")
+        view (gl-utils/get-uniform-location gl gl-state "u_view")]
+    (.uniformMatrix4fv gl view false (:view-matrix @gl-state identity-matrix))
     (.uniformMatrix4fv gl projection false
                        (mat4/perspective
                         (mat4/create)
                         (* 50 (/ js/Math.PI 180))
                         1
                         0.1
-                        100))))
+                        10000))))
 
 (defn- draw-elements [gl primitive]
   (let [indices (:indices primitive)]
@@ -99,6 +100,7 @@
 
 (defn- draw-primitive [gl primitive]
   (when-let [position-attribute (get-in primitive [:attributes :POSITION])]
+    (swap! gl-state update-in [:stats :primitive-count] inc)
     (bind-gl-buffer gl (:bufferView position-attribute) (.-ARRAY_BUFFER gl))
     (bind-vertex-array gl primitive)
     (if (:indices primitive)
@@ -106,10 +108,9 @@
       (.drawArrays gl (.-TRIANGLES gl) 0 (* 3 100)))))
 
 (defn- draw-mesh [gl mesh]
+  (swap! gl-state update-in [:stats :mesh-count] inc)
   (doseq [p (:primitives mesh)]
     (draw-primitive gl p)))
-
-(def identity-matrix (mat4/create))
 
 (defn- draw-node
   ([gl node]
@@ -118,6 +119,7 @@
   ([gl node parent-transform]
    (let [local-transform (or (:matrix node) identity-matrix)
          global-transform (mat4/multiply (mat4/create) parent-transform local-transform)]
+     (swap! gl-state update-in [:stats :node-count] inc)
      (when-let [mesh (:mesh node)]
        (set-transform-matrix! gl global-transform)
        (draw-mesh gl mesh))
@@ -140,12 +142,21 @@
 
 (defn draw [scene]
   (when-let [gl (:gl @gl-state)]
-    (when-not (identical? scene (:scene @gl-state))
-      (swap! gl-state setup-new-scene gl scene))
-    (.clear gl (bit-or (.-DEPTH_BUFFER_BIT gl) (.-COLOR_BUFFER_BIT gl)))
-    (bind-uniforms gl)
-    (doseq [node (:nodes scene)]
-      (draw-node gl node))))
+    (let [start (js/performance.now)]
+      (when-not (identical? scene (:scene @gl-state))
+        (swap! gl-state setup-new-scene gl scene))
+      (swap! gl-state dissoc :stats)
+      (.clear gl (bit-or (.-DEPTH_BUFFER_BIT gl) (.-COLOR_BUFFER_BIT gl)))
+      (bind-uniforms gl)
+      (doseq [node (:nodes scene)]
+        (draw-node gl node))
+
+      (ui/draw-text
+       (str "Meshes: " (-> @gl-state :stats :mesh-count)
+            " Primitives: " (-> @gl-state :stats :primitive-count)
+            " Nodes: " (-> @gl-state :stats :node-count)) 80)
+
+      (ui/draw-text (str "Draw time: " (.toFixed (- (js/performance.now) start) 2) "ms") 100))))
 
 (defn recompile-shaders []
   (when-let [gl (:gl @gl-state)]

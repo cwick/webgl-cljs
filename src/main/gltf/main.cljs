@@ -76,8 +76,8 @@
         time-delta (- time-seconds last-frame-time)]
     (when (> time-delta 0)
       (swap! game-state update :camera #(camera/update-camera % time-delta))
-      (draw-model)
-      (ui/draw-hud @game-state))
+      (ui/draw-hud @game-state)
+      (draw-model))
     (swap! game-state assoc :last-frame-time time-seconds)
     (js/requestAnimationFrame main-loop)))
 
@@ -95,9 +95,5 @@
     (input/on-key-down hud-canvas #'handle-keyboard-input)
     (input/on-key-up hud-canvas #'handle-keyboard-input)
     (gl/init-webgl canvas))
-
-  (add-watch app-state :model (fn [_ _ old new]
-                                (when-not (identical? (:model old) (:model new))
-                                  (draw-model))))
 
   (js/requestAnimationFrame main-loop))

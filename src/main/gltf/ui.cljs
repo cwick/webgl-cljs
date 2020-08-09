@@ -39,19 +39,22 @@
     (set! (.-textBaseline ctx) "top")
     (reset! hud-ctx ctx)))
 
+(defn draw-text [text position]
+  (when-let [ctx @hud-ctx]
+    (.fillText ctx text 0 position)))
+
 (defn draw-hud [game-state]
   (when-let [ctx @hud-ctx]
     (let [camera (:camera game-state)]
       (.clearRect ctx 0 0
                   (-> ctx .-canvas .-width)
                   (-> ctx .-canvas .-height))
-      (.fillText ctx (str (:buttons game-state)) 0 0)
-      (.fillText ctx (apply gstring/format "Y:%-+7.2f° P:%-+6.2f° T:[%.2f %.2f %.2f]"
-                            (:yaw camera)
-                            (:pitch camera)
-                            (:position camera)) 0 20)
-      (.fillText ctx (apply gstring/format "dT:[%.2f %.2f %.2f]"
-                            (:velocity camera)) 0 40)
-
-      (.fillText ctx (apply gstring/format "L:[%.3f %.3f %.3f]"
-                            (:look camera)) 0 60))))
+      (draw-text (str (:buttons game-state)) 0)
+      (draw-text (apply gstring/format "Y:%-+7.2f° P:%-+6.2f° T:[%.2f %.2f %.2f]"
+                        (:yaw camera)
+                        (:pitch camera)
+                        (:position camera)) 20)
+      (draw-text (apply gstring/format "dT:[%.2f %.2f %.2f]"
+                        (:velocity camera)) 40)
+      (draw-text (apply gstring/format "L:[%.3f %.3f %.3f]"
+                        (:look camera)) 60))))
