@@ -77,9 +77,10 @@
         last-frame-time (or (:last-frame-time @game-state) time-seconds)
         time-delta (- time-seconds last-frame-time)]
     (when (> time-delta 0)
+      (ui/clear-hud)
       (swap! game-state update :camera #(camera/update-camera % time-delta))
-      (ui/draw-hud @game-state)
-      (draw-model))
+      (draw-model)
+      (ui/draw-hud @game-state))
     (swap! game-state assoc :last-frame-time time-seconds)
     (js/requestAnimationFrame main-loop)))
 
