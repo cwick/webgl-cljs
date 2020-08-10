@@ -138,11 +138,9 @@
   [old-state gl scene]
 
   (doseq [[_ gl-buffer] (:buffers old-state)]
-    (println "delete buffer")
     (.deleteBuffer gl gl-buffer))
 
   (doseq [[_ gl-vao] (:vertex-arrays old-state)]
-    (println "delete vao")
     (.deleteVertexArray gl gl-vao))
 
   (-> old-state
@@ -164,7 +162,9 @@
       (ui/draw-text
        (str "Meshes: " (-> @gl-state :stats :mesh-count)
             " Primitives: " (-> @gl-state :stats :primitive-count)
-            " Nodes: " (-> @gl-state :stats :node-count)) 80)
+            " Nodes: " (-> @gl-state :stats :node-count)
+            " Buffers: " (count (-> @gl-state :buffers))
+            " VAO: " (count (-> @gl-state :vertex-arrays))) 80)
 
       (ui/draw-text (str "Draw time: " (.toFixed (- (js/performance.now) start) 2) "ms") 100))))
 
