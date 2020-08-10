@@ -85,7 +85,8 @@
       (.attachShader gl program fragment-shader))
     (when (or vertex-shader-dirty? fragment-shader-dirty?)
       (.linkProgram gl program)
-      (validate-program gl program))
+      (validate-program gl program)
+      (swap! gl-state dissoc :uniforms))
     (.useProgram gl program)))
 
 (defn get-uniform-location [gl gl-state uniform]
