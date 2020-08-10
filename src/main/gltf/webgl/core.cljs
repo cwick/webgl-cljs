@@ -21,6 +21,7 @@
                    (.-STATIC_DRAW gl)
                    (:byteOffset buffer-view)
                    (:byteLength buffer-view))
+      (.bindBuffer gl target nil)
       (swap! gl-state assoc-in [:buffers buffer-view] gl-buffer)
       gl-buffer)))
 
@@ -83,9 +84,7 @@
                         10000))))
 
 (defn- draw-elements [gl primitive]
-  (let [indices (:indices primitive)
-        buffer (get-gl-buffer gl (:bufferView indices) (.-ELEMENT_ARRAY_BUFFER gl))]
-    (.bindBuffer gl (.-ELEMENT_ARRAY_BUFFER gl) buffer)
+  (let [indices (:indices primitive)]
     (.drawElements gl
                    (goog.object/get gl (name (:mode primitive)))
                    (:count indices)
@@ -100,6 +99,9 @@
           vertex-buffer (get-gl-buffer gl (:bufferView position-accessor) (.-ARRAY_BUFFER gl))]
       (.bindVertexArray gl gl-vao)
       (.bindBuffer gl (.-ARRAY_BUFFER gl) vertex-buffer)
+      (when-let [indices (:indices primitive)]
+        (let [element-buffer (get-gl-buffer gl (:bufferView indices) (.-ELEMENT_ARRAY_BUFFER gl))]
+          (.bindBuffer gl (.-ELEMENT_ARRAY_BUFFER gl) element-buffer)))
       (bind-vertex-attribute gl position-accessor "POSITION")
       (swap! gl-state assoc-in [:vertex-arrays primitive] gl-vao))))
 
@@ -136,9 +138,11 @@
   [old-state gl scene]
 
   (doseq [[_ gl-buffer] (:buffers old-state)]
+    (println "delete buffer")
     (.deleteBuffer gl gl-buffer))
 
   (doseq [[_ gl-vao] (:vertex-arrays old-state)]
+    (println "delete vao")
     (.deleteVertexArray gl gl-vao))
 
   (-> old-state
