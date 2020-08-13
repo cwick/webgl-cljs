@@ -53,22 +53,25 @@
             attributes)))
 
 (defn- resolve-primitive [data primitive]
-  (cond-> primitive
-    (contains? primitive :indices)
-    (assoc :indices (resolve-accessor data (:indices primitive)))
+  (-> primitive
+      (cond->
+       (contains? primitive :indices)
+        (assoc :indices (resolve-accessor data (:indices primitive)))
 
-    :then
-    (assoc
-     :attributes (resolve-attributes data (:attributes primitive))
-     :mode (condp = (:mode primitive)
-             0 :POINTS
-             1 :LINES
-             2 :LINE_LOOP
-             3 :LINE_STRIP
-             4 :TRIANGLES
-             5 :TRIANGLE_STRIP
-             6 :TRIANGLE_FAN
-             :TRIANGLES))))
+        (contains? primitive :material)
+        (assoc :material (get-in data [:materials (:material primitive)])))
+
+      (assoc
+       :attributes (resolve-attributes data (:attributes primitive))
+       :mode (condp = (:mode primitive)
+               0 :POINTS
+               1 :LINES
+               2 :LINE_LOOP
+               3 :LINE_STRIP
+               4 :TRIANGLES
+               5 :TRIANGLE_STRIP
+               6 :TRIANGLE_FAN
+               :TRIANGLES))))
 
 (defn- resolve-primitives [data primitives]
   (map #(resolve-primitive data %) primitives))
@@ -77,6 +80,33 @@
   (let [mesh (get-in data [:meshes mesh-id])]
     (-> (update mesh :primitives #(resolve-primitives data %))
         (assoc :id mesh-id))))
+
+(defn- resolve-texture [data texture-id]
+  (let [texture (get-in data [:textures texture-id])]
+    (update texture :source #(get-in data [:images %]))))
+
+(defn- resolve-pbr [data pbr]
+  (-> pbr
+      (update :baseColorTexture #(resolve-texture data (:index %)))
+      (update :metallicRoughnessTexture #(resolve-texture data (:index %)))))
+
+(defn- resolve-material [data material-id]
+  (let [material (get-in data [:materials material-id])]
+    (update material :pbrMetallicRoughness #(resolve-pbr data %))))
+
+(defn- resolve-all-materials [data]
+  (assoc data :materials
+         (into [] (map #(resolve-material data %) (range (count (:materials data)))))))
+
+(defn- resolve-all-meshes [data]
+  (assoc data :meshes
+         (into [] (map #(resolve-mesh data %) (range (count (:meshes data)))))))
+
+(defn- preprocess [data]
+  (-> data
+      ; Order of resolution matters here
+      (resolve-all-materials)
+      (resolve-all-meshes)))
 
 (defn- resolve-camera [data camera-id]
   (let [camera (get-in data [:cameras camera-id])]
@@ -101,7 +131,7 @@
     (->
      (cond-> node
        (contains? node :mesh)
-       (assoc! :mesh (resolve-mesh data (:mesh node)))
+       (assoc! :mesh (get-in data [:meshes (:mesh node)]))
 
        (contains? node :children)
        (assoc! :children (resolve-children data (:children node)))
@@ -129,6 +159,5 @@
 
 (defn load-gltf [data base-url]
   (-> (load-assets data base-url)
-      (.then #(resolve-scene % (:scene data)))))
-
-
+      (.then #(preprocess %))
+      (.then #(resolve-scene % (:scene %)))))
