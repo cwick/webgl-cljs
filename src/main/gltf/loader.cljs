@@ -7,9 +7,24 @@
       (.then #(.arrayBuffer %))
       (.then #(assoc buffer :data %))))
 
+(defn- load-image [image base-url]
+  (let [image-url (uri/appendPath base-url (:uri image))
+        js-image (js/Image.)]
+    (set! (.-src js-image) image-url)
+    (js/Promise. (fn [resolve]
+                   (.addEventListener
+                    js-image
+                    "load"
+                    #(resolve (assoc image :data js-image)))))))
+
 (defn- load-assets [data base-url]
-  (-> (js/Promise.all (map #(load-buffer % base-url) (:buffers data)))
-      (.then #(assoc data :buffers (into [] %)))))
+  (let [buffer-promises (js/Promise.all (map #(load-buffer % base-url) (:buffers data)))
+        image-promises (js/Promise.all (map #(load-image % base-url) (:images data)))]
+    (-> (js/Promise.all [buffer-promises image-promises])
+        (.then (fn [[buffers images]]
+                 (assoc data
+                        :buffers (into [] buffers)
+                        :images (into [] images)))))))
 
 (defn- resolve-buffer [data buffer-id]
   (-> (get-in data [:buffers buffer-id])
