@@ -45,6 +45,30 @@
     (.enable gl (.-DEPTH_TEST gl))
     (gl-utils/recompile-shaders gl gl-state)))
 
+(defn- setup-new-scene
+  "Free all GL resources and set new scene"
+  [old-state gl scene]
+
+  (doseq [[_ gl-buffer] (:buffers old-state)]
+    (.deleteBuffer gl gl-buffer))
+
+  (doseq [[_ gl-vao] (:vertex-arrays old-state)]
+    (.deleteVertexArray gl gl-vao))
+
+  (-> old-state
+      (dissoc :buffers)
+      (dissoc :vertex-arrays)
+      (assoc :scene scene)))
+
+(defn- print-debug-info [start-time]
+  (ui/debug
+   (str "Meshes: " (-> @gl-state :stats :mesh-count)
+        " Primitives: " (-> @gl-state :stats :primitive-count)
+        " Nodes: " (-> @gl-state :stats :node-count)
+        " Buffers: " (count (-> @gl-state :buffers))
+        " VAO: " (count (-> @gl-state :vertex-arrays))))
+  (ui/debug (str "Draw time: " (.toFixed (- (js/performance.now) start-time) 2) "ms")))
+
 (defn- bind-vertex-attribute [gl accessor attribute-name]
   (let [component-counts {:SCALAR 1
                           :VEC2 2
@@ -133,24 +157,9 @@
        (draw-mesh gl mesh))
      (doseq [child (:children node)] (draw-node gl child global-transform)))))
 
-(defn- setup-new-scene
-  "Free all GL resources and set new scene"
-  [old-state gl scene]
-
-  (doseq [[_ gl-buffer] (:buffers old-state)]
-    (.deleteBuffer gl gl-buffer))
-
-  (doseq [[_ gl-vao] (:vertex-arrays old-state)]
-    (.deleteVertexArray gl gl-vao))
-
-  (-> old-state
-      (dissoc :buffers)
-      (dissoc :vertex-arrays)
-      (assoc :scene scene)))
-
 (defn draw [scene]
   (when-let [gl (:gl @gl-state)]
-    (let [start (js/performance.now)]
+    (let [start-time (js/performance.now)]
       (when-not (identical? scene (:scene @gl-state))
         (swap! gl-state setup-new-scene gl scene))
       (swap! gl-state dissoc :stats)
@@ -158,15 +167,7 @@
       (bind-uniforms gl)
       (doseq [node (:nodes scene)]
         (draw-node gl node))
-
-      (ui/draw-text
-       (str "Meshes: " (-> @gl-state :stats :mesh-count)
-            " Primitives: " (-> @gl-state :stats :primitive-count)
-            " Nodes: " (-> @gl-state :stats :node-count)
-            " Buffers: " (count (-> @gl-state :buffers))
-            " VAO: " (count (-> @gl-state :vertex-arrays))) 80)
-
-      (ui/draw-text (str "Draw time: " (.toFixed (- (js/performance.now) start) 2) "ms") 100))))
+      (print-debug-info start-time))))
 
 (defn recompile-shaders []
   (when-let [gl (:gl @gl-state)]

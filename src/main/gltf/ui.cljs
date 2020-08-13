@@ -29,34 +29,28 @@
                       [:option {:value idx :key (:name model)} (:name model)])
                     @models)])))
 
+(defonce ui-state (atom nil))
 (defonce hud-ctx (atom nil))
+(def LINE-HEIGHT 20)
+(def INITIAL-STATE {:line -1})
 
-(defn init-hud [canvas]
+(defn init [canvas]
   (let [ctx (.getContext canvas "2d")]
     (.scale ctx 1.25 1.25)
     (set! (.-fillStyle ctx) "white")
     (set! (.-font ctx) "20px consolas")
     (set! (.-textBaseline ctx) "top")
-    (reset! hud-ctx ctx)))
+    (reset! ui-state (merge {:context ctx} INITIAL-STATE))))
 
-(defn draw-text [text position]
-  (when-let [ctx @hud-ctx]
-    (.fillText ctx text 0 position)))
+(defn debug [text]
+  (when-let [ctx (:context @ui-state)]
+    (let [line (inc (:line @ui-state))]
+      (.fillText ctx text 0 (* LINE-HEIGHT line))
+      (swap! ui-state assoc :line line))))
 
-(defn clear-hud []
-  (when-let [ctx @hud-ctx]
+(defn clear []
+  (when-let [ctx (:context @ui-state)]
     (.clearRect ctx 0 0
                 (-> ctx .-canvas .-width)
-                (-> ctx .-canvas .-height))))
-
-(defn draw-hud [game-state]
-  (let [camera (:camera game-state)]
-    (draw-text (str (:buttons game-state)) 0)
-    (draw-text (apply gstring/format "Y:%-+7.2f° P:%-+6.2f° T:[%.2f %.2f %.2f]"
-                      (:yaw camera)
-                      (:pitch camera)
-                      (:position camera)) 20)
-    (draw-text (apply gstring/format "dT:[%.2f %.2f %.2f]"
-                      (:velocity camera)) 40)
-    (draw-text (apply gstring/format "L:[%.3f %.3f %.3f]"
-                      (:look camera)) 60)))
+                (-> ctx .-canvas .-height))
+    (swap! ui-state merge INITIAL-STATE)))

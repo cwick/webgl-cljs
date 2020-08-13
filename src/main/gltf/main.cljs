@@ -77,10 +77,9 @@
         last-frame-time (or (:last-frame-time @game-state) time-seconds)
         time-delta (- time-seconds last-frame-time)]
     (when (> time-delta 0)
-      (ui/clear-hud)
+      (ui/clear)
       (swap! game-state update :camera #(camera/update-camera % time-delta))
-      (draw-model)
-      (ui/draw-hud @game-state))
+      (draw-model))
     (swap! game-state assoc :last-frame-time time-seconds)
     (js/requestAnimationFrame main-loop)))
 
@@ -92,7 +91,7 @@
 
   (let [canvas (js/document.getElementById "canvas")
         hud-canvas (js/document.getElementById "hud-canvas")]
-    (ui/init-hud hud-canvas)
+    (ui/init hud-canvas)
     (input/init hud-canvas)
     (input/on-mouse-move hud-canvas #'handle-mouse-input)
     (input/on-key-down hud-canvas #'handle-keyboard-input)
