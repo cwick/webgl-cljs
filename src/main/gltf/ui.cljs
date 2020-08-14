@@ -1,5 +1,4 @@
 (ns gltf.ui (:require [reagent.core :as r]
-                      [goog.string :as gstring]
                       goog.string.format))
 
 (def model-repository "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Models/master/2.0/")
@@ -36,6 +35,7 @@
 
 (defn init [canvas]
   (let [ctx (.getContext canvas "2d")]
+    ; TODO don't hardcode this.
     (.scale ctx 1.25 1.25)
     (set! (.-fillStyle ctx) "white")
     (set! (.-font ctx) "18px consolas")

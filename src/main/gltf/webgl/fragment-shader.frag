@@ -6,15 +6,26 @@ precision mediump float;
 
 out vec4 outColor;
 in vec4 worldPosition;
-   
+in vec2 texcoord_0;
+uniform sampler2D u_texture0;
+
+vec4 gammaCorrect(vec4 c) {
+  float gamma = 2.2;
+  return vec4(
+    pow(
+      vec3(c), 
+      vec3(1.0/gamma)), 
+    c.a);
+} 
+
 void main() {
   vec3 xTangent = dFdx( vec3(worldPosition) );
   vec3 yTangent = dFdy( vec3(worldPosition) );
   vec3 faceNormal = normalize( cross( xTangent, yTangent ) );
-  float lightValue = smoothstep(-1.1, 1.2, faceNormal.y);
+  float lightValue = smoothstep(-1.0, 1.0, faceNormal.y);
 
-  vec3 highlightColor = vec3(0., 0.8, 0.4);
-  vec3 shadowColor = vec3(0., 0.1, 0.1);
+  outColor = vec4(lightValue * vec3(texture(u_texture0, texcoord_0)), 1.0);
 
-  outColor = vec4(mix(shadowColor, highlightColor, lightValue), 1.);
+  // TODO: only gamma correct if we have to
+  outColor = gammaCorrect(outColor);
 }

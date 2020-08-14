@@ -10,7 +10,7 @@
 (defn- init-gl-state [gl]
   (reset! gl-state {:gl gl}))
 
-(defn- get-gl-texture-buffer [gl texture]
+(defn- get-gl-texture [gl texture]
   (if-let [gl-texture (get-in @gl-state [:texture-buffers texture])]
     gl-texture
     (let [gl-texture (.createTexture gl)]
@@ -99,7 +99,7 @@
         " VAO: " (count (-> @gl-state :vertex-arrays))))
   (ui/debug (str "Draw time: " (.toFixed (- (js/performance.now) start-time) 2) "ms")))
 
-(defn- bind-vertex-attribute [gl accessor attribute-name]
+(defn- vertex-attrib-pointer [gl accessor attribute-name]
   (let [component-counts {:SCALAR 1
                           :VEC2 2
                           :VEC3 3
@@ -121,13 +121,21 @@
      (:byteOffset accessor) ; offset into the buffer
      )))
 
+(defn- bind-vertex-attribute [gl primitive attribute]
+  (if-let [accessor (get-in primitive [:attributes attribute])]
+    (let [vertex-buffer (get-gl-buffer gl (:bufferView accessor) (.-ARRAY_BUFFER gl))]
+      (.bindBuffer gl (.-ARRAY_BUFFER gl) vertex-buffer)
+      (vertex-attrib-pointer gl accessor (name attribute)))))
+
 (defn- set-transform-matrix! [gl matrix]
   (let [transform-location (gl-utils/get-uniform-location gl gl-state "u_transform")]
     (.uniformMatrix4fv gl transform-location false matrix)))
 
 (defn- bind-uniforms [gl]
   (let [projection (gl-utils/get-uniform-location gl gl-state "u_projection")
-        view (gl-utils/get-uniform-location gl gl-state "u_view")]
+        view (gl-utils/get-uniform-location gl gl-state "u_view")
+        texcoord-0 (gl-utils/get-uniform-location gl gl-state "u_texture0")]
+    (.uniform1i gl texcoord-0 0)
     (.uniformMatrix4fv gl view false (:view-matrix @gl-state identity-matrix))
     (.uniformMatrix4fv gl projection false
                        (mat4/makePerspective
@@ -148,20 +156,20 @@
 (defn- bind-vertex-array [gl primitive]
   (if-let [gl-vao (get-in @gl-state [:vertex-arrays primitive])]
     (.bindVertexArray gl gl-vao)
-    (let [gl-vao (.createVertexArray gl)
-          position-accessor (-> primitive :attributes :POSITION)
-          vertex-buffer (get-gl-buffer gl (:bufferView position-accessor) (.-ARRAY_BUFFER gl))]
+    (let [gl-vao (.createVertexArray gl)]
       (.bindVertexArray gl gl-vao)
-      (.bindBuffer gl (.-ARRAY_BUFFER gl) vertex-buffer)
       (when-let [indices (:indices primitive)]
         (let [element-buffer (get-gl-buffer gl (:bufferView indices) (.-ELEMENT_ARRAY_BUFFER gl))]
           (.bindBuffer gl (.-ELEMENT_ARRAY_BUFFER gl) element-buffer)))
-      (bind-vertex-attribute gl position-accessor "POSITION")
+      (bind-vertex-attribute gl primitive :POSITION)
+      (bind-vertex-attribute gl primitive :TEXCOORD_0)
       (swap! gl-state assoc-in [:vertex-arrays primitive] gl-vao))))
 
 (defn- bind-textures [gl primitive]
   (when-let [texture (get-in primitive [:material :pbrMetallicRoughness :baseColorTexture :source])]
-    (let [texture-buffer (get-gl-texture-buffer gl texture)])))
+    (let [gl-texture (get-gl-texture gl texture)]
+      (.activeTexture gl (.-TEXTURE0 gl))
+      (.bindTexture gl (.-TEXTURE_2D gl) gl-texture))))
 
 (defn- draw-primitive [gl primitive]
   (swap! gl-state update-in [:stats :primitive-count] inc)
