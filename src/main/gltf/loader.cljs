@@ -11,6 +11,8 @@
   (let [image-url (uri/appendPath base-url (:uri image))
         js-image (js/Image.)]
     (set! (.-src js-image) image-url)
+    (when (not= js/window.location.origin (.-origin (js/URL. image-url)))
+      (set! (.-crossOrigin js-image) "anonymous"))
     (js/Promise. (fn [resolve]
                    (.addEventListener
                     js-image

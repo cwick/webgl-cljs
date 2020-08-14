@@ -38,7 +38,7 @@
   (let [ctx (.getContext canvas "2d")]
     (.scale ctx 1.25 1.25)
     (set! (.-fillStyle ctx) "white")
-    (set! (.-font ctx) "20px consolas")
+    (set! (.-font ctx) "18px consolas")
     (set! (.-textBaseline ctx) "top")
     (reset! ui-state (merge {:context ctx} INITIAL-STATE))))
 

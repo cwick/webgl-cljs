@@ -10,6 +10,31 @@
 (defn- init-gl-state [gl]
   (reset! gl-state {:gl gl}))
 
+(defn- get-gl-texture-buffer [gl texture]
+  (if-let [gl-texture (get-in @gl-state [:texture-buffers texture])]
+    gl-texture
+    (let [gl-texture (.createTexture gl)]
+      (.bindTexture gl (.-TEXTURE_2D gl) gl-texture)
+      ; Set the parameters so we don't need mips
+      (.texParameteri gl (.-TEXTURE_2D gl) (.-TEXTURE_WRAP_S gl) (.-CLAMP_TO_EDGE gl))
+      (.texParameteri gl (.-TEXTURE_2D gl) (.-TEXTURE_WRAP_T gl) (.-CLAMP_TO_EDGE gl))
+      (.texParameteri gl (.-TEXTURE_2D gl) (.-TEXTURE_MIN_FILTER gl) (.-NEAREST gl))
+      (.texParameteri gl (.-TEXTURE_2D gl) (.-TEXTURE_MAG_FILTER gl) (.-NEAREST gl))
+      ; See https://github.com/KhronosGroup/glTF/tree/master/specification/2.0#images
+      (.pixelStorei gl (.-UNPACK_COLORSPACE_CONVERSION_WEBGL gl) (.-NONE gl))
+      (swap! gl-state assoc-in [:texture-buffers texture] gl-texture)
+      ; Images must be converted from sRGB to linear space
+      ; See https://www.khronos.org/registry/OpenGL-Refpages/es3.0/html/glTexImage2D.xhtml
+      ; See https://github.com/KhronosGroup/glTF/tree/master/specification/2.0#metallic-roughness-material
+      (.texImage2D gl
+                   (.-TEXTURE_2D gl)
+                   0 ; mip level
+                   (.-SRGB8_ALPHA8 gl) ; internal format
+                   (.-RGBA gl) ; format
+                   (.-UNSIGNED_BYTE gl) ; type
+                   (:data texture))
+      gl-texture)))
+
 (defn- get-gl-buffer [gl buffer-view target]
   (if-let [gl-buffer (get-in @gl-state [:buffers buffer-view])]
     gl-buffer
@@ -52,11 +77,15 @@
   (doseq [[_ gl-buffer] (:buffers old-state)]
     (.deleteBuffer gl gl-buffer))
 
+  (doseq [[_ gl-texture] (:texture-buffers old-state)]
+    (.deleteTexture gl gl-texture))
+
   (doseq [[_ gl-vao] (:vertex-arrays old-state)]
     (.deleteVertexArray gl gl-vao))
 
   (-> old-state
       (dissoc :buffers)
+      (dissoc :texture-buffers)
       (dissoc :vertex-arrays)
       (assoc :scene scene)))
 
@@ -66,6 +95,7 @@
         " Primitives: " (-> @gl-state :stats :primitive-count)
         " Nodes: " (-> @gl-state :stats :node-count)
         " Buffers: " (count (-> @gl-state :buffers))
+        " Textures: " (count (-> @gl-state :texture-buffers))
         " VAO: " (count (-> @gl-state :vertex-arrays))))
   (ui/debug (str "Draw time: " (.toFixed (- (js/performance.now) start-time) 2) "ms")))
 
@@ -129,9 +159,14 @@
       (bind-vertex-attribute gl position-accessor "POSITION")
       (swap! gl-state assoc-in [:vertex-arrays primitive] gl-vao))))
 
+(defn- bind-textures [gl primitive]
+  (when-let [texture (get-in primitive [:material :pbrMetallicRoughness :baseColorTexture :source])]
+    (let [texture-buffer (get-gl-texture-buffer gl texture)])))
+
 (defn- draw-primitive [gl primitive]
   (swap! gl-state update-in [:stats :primitive-count] inc)
   (bind-vertex-array gl primitive)
+  (bind-textures gl primitive)
   (if (:indices primitive)
     (draw-elements gl primitive)
     (.drawArrays gl
