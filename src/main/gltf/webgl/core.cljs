@@ -13,13 +13,13 @@
 (defn- get-gl-texture [gl texture]
   (if-let [gl-texture (get-in @gl-state [:texture-buffers texture])]
     gl-texture
-    (let [gl-texture (.createTexture gl)]
+    (let [gl-texture (.createTexture gl)
+          sampler (:sampler texture)]
       (.bindTexture gl (.-TEXTURE_2D gl) gl-texture)
-      ; Set the parameters so we don't need mips
-      (.texParameteri gl (.-TEXTURE_2D gl) (.-TEXTURE_WRAP_S gl) (.-CLAMP_TO_EDGE gl))
-      (.texParameteri gl (.-TEXTURE_2D gl) (.-TEXTURE_WRAP_T gl) (.-CLAMP_TO_EDGE gl))
-      (.texParameteri gl (.-TEXTURE_2D gl) (.-TEXTURE_MIN_FILTER gl) (.-NEAREST gl))
-      (.texParameteri gl (.-TEXTURE_2D gl) (.-TEXTURE_MAG_FILTER gl) (.-NEAREST gl))
+      (.texParameteri gl (.-TEXTURE_2D gl) (.-TEXTURE_WRAP_S gl) (or (:wrapS sampler) (.-REPEAT gl)))
+      (.texParameteri gl (.-TEXTURE_2D gl) (.-TEXTURE_WRAP_T gl) (or (:wrapT sampler) (.-REPEAT gl)))
+      (.texParameteri gl (.-TEXTURE_2D gl) (.-TEXTURE_MIN_FILTER gl) (or (:minFilter sampler) (.-LINEAR gl)))
+      (.texParameteri gl (.-TEXTURE_2D gl) (.-TEXTURE_MAG_FILTER gl) (or (:magFilter sampler) (.-LINEAR gl)))
       ; See https://github.com/KhronosGroup/glTF/tree/master/specification/2.0#images
       (.pixelStorei gl (.-UNPACK_COLORSPACE_CONVERSION_WEBGL gl) (.-NONE gl))
       (swap! gl-state assoc-in [:texture-buffers texture] gl-texture)
@@ -32,7 +32,13 @@
                    (.-SRGB8_ALPHA8 gl) ; internal format
                    (.-RGBA gl) ; format
                    (.-UNSIGNED_BYTE gl) ; type
-                   (:data texture))
+                   (-> texture :source :data))
+      (when (contains? #{(.-LINEAR_MIPMAP_NEAREST gl)
+                         (.-NEAREST_MIPMAP_LINEAR gl)
+                         (.-NEAREST_MIPMAP_NEAREST gl)
+                         (.-LINEAR_MIPMAP_LINEAR gl)}
+                       (:minFilter sampler))
+        (.generateMipmap gl (.-TEXTURE_2D gl)))
       gl-texture)))
 
 (defn- get-gl-buffer [gl buffer-view target]
@@ -166,7 +172,7 @@
       (swap! gl-state assoc-in [:vertex-arrays primitive] gl-vao))))
 
 (defn- bind-textures [gl primitive]
-  (when-let [texture (get-in primitive [:material :pbrMetallicRoughness :baseColorTexture :source])]
+  (when-let [texture (get-in primitive [:material :pbrMetallicRoughness :baseColorTexture])]
     (let [gl-texture (get-gl-texture gl texture)]
       (.activeTexture gl (.-TEXTURE0 gl))
       (.bindTexture gl (.-TEXTURE_2D gl) gl-texture))))

@@ -56,7 +56,7 @@
           (update 1 inc)
           (contains? pressed-buttons "KeyA")
           (update 1 dec))
-        camera-speed 20
+        camera-speed 10
         normalized-impulse (if (= impulse [0 0])
                              #js[0 0]
                              (vec2/normalize (clj->js impulse) (vec2/create)))

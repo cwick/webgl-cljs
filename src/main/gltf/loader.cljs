@@ -100,7 +100,9 @@
 
 (defn- resolve-texture [data texture-id]
   (let [texture (get-in data [:textures texture-id])]
-    (update texture :source #(get-in data [:images %]))))
+    (-> texture
+        (update :source #(get-in data [:images %]))
+        (update :sampler #(get-in data [:samplers %])))))
 
 (defn- resolve-pbr [data pbr]
   (-> pbr
