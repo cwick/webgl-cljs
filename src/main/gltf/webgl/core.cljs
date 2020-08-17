@@ -155,6 +155,11 @@
   (swap! gl-state update-in [:stats :primitive-count] inc)
   (bind-vertex-array gl primitive)
   (bind-textures gl primitive)
+
+  (if (-> primitive :material :doubleSided)
+    (.disable gl (.-CULL_FACE gl))
+    (.enable gl (.-CULL_FACE gl)))
+
   (if (:indices primitive)
     (draw-elements gl primitive)
     (.drawArrays gl
@@ -213,10 +218,6 @@
                (-> gl .-canvas .-width)
                (-> gl .-canvas .-height))
     (.clearColor gl 0 0 0 1)
-    ; Cull back facing triangles. The default winding order is counter-clockwise,
-    ; meaning that the "front" face is the one where vertices are drawn in a counter-clockwise
-    ; order.
-    (.enable gl (.-CULL_FACE gl))
     (.enable gl (.-DEPTH_TEST gl))
     (gl-utils/recompile-shaders gl gl-state)))
 
