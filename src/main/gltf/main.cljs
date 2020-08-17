@@ -6,7 +6,8 @@
                         [gltf.webgl.core :as gl]
                         [gltf.ui :as ui]
                         [gltf.camera :as camera]
-                        [goog.vec.vec2f :as vec2]))
+                        [goog.vec.vec2f :as vec2]
+                        [goog.vec.mat4f :as mat4]))
 
 (defonce app-state (r/atom {}))
 
@@ -72,7 +73,7 @@
 
 (defn ^:dev/before-load stop [])
 
-(defn main-loop [time]
+(defn- main-loop [time]
   (let [time-seconds (/ time 1000)
         last-frame-time (or (:last-frame-time @game-state) time-seconds)
         time-delta (- time-seconds last-frame-time)]
@@ -83,6 +84,22 @@
     (swap! game-state assoc :last-frame-time time-seconds)
     (js/requestAnimationFrame main-loop)))
 
+(defn- observe-canvas [canvas]
+  (let [observer
+        (js/ResizeObserver.
+         #(let [rect (.-contentRect (aget % 0))
+                width (.-width rect)
+                height (.-height rect)]
+            (gl/set-projection-matrix!
+             (mat4/makePerspective
+              (mat4/create)
+              (* 50 (/ js/Math.PI 180))
+              (/ width height)
+              0.1
+              10000))
+            (ui/resize-canvas width height)))]
+    (.observe observer canvas)))
+
 (defn init []
   (start)
   (rdom/render
@@ -90,12 +107,13 @@
    (js/document.getElementById "app"))
 
   (let [canvas (js/document.getElementById "canvas")
-        hud-canvas (js/document.getElementById "hud-canvas")]
-    (ui/init hud-canvas)
-    (input/init hud-canvas)
-    (input/on-mouse-move hud-canvas #'handle-mouse-input)
-    (input/on-key-down hud-canvas #'handle-keyboard-input)
-    (input/on-key-up hud-canvas #'handle-keyboard-input)
-    (gl/init-webgl canvas))
+        ui-canvas (js/document.getElementById "ui-canvas")]
+    (ui/init ui-canvas)
+    (input/init ui-canvas)
+    (input/on-mouse-move ui-canvas #'handle-mouse-input)
+    (input/on-key-down ui-canvas #'handle-keyboard-input)
+    (input/on-key-up ui-canvas #'handle-keyboard-input)
+    (gl/init-webgl canvas)
+    (observe-canvas canvas))
 
   (js/requestAnimationFrame main-loop))

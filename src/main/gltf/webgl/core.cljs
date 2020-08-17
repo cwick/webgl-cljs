@@ -56,26 +56,6 @@
       (swap! gl-state assoc-in [:buffers buffer-view] gl-buffer)
       gl-buffer)))
 
-(defn init-webgl [canvas]
-  (let [gl (.getContext canvas "webgl2")]
-    (init-gl-state gl)
-    (when-not gl
-      (throw (js/Error. "WebGL 2.0 not available")))
-
-    (.viewport gl
-               0
-               0
-               (-> gl .-canvas .-width)
-               (-> gl .-canvas .-height))
-
-    (.clearColor gl 0 0 0 1)
-    ; Cull back facing triangles. The default winding order is counter-clockwise,
-    ; meaning that the "front" face is the one where vertices are drawn in a counter-clockwise
-    ; order.
-    (.enable gl (.-CULL_FACE gl))
-    (.enable gl (.-DEPTH_TEST gl))
-    (gl-utils/recompile-shaders gl gl-state)))
-
 (defn- setup-new-scene
   "Free all GL resources and set new scene"
   [old-state gl scene]
@@ -143,13 +123,7 @@
         texcoord-0 (gl-utils/get-uniform-location gl gl-state "u_texture0")]
     (.uniform1i gl texcoord-0 0)
     (.uniformMatrix4fv gl view false (:view-matrix @gl-state identity-matrix))
-    (.uniformMatrix4fv gl projection false
-                       (mat4/makePerspective
-                        (mat4/create)
-                        (* 50 (/ js/Math.PI 180))
-                        1
-                        0.1
-                        10000))))
+    (.uniformMatrix4fv gl projection false (:projection-matrix @gl-state identity-matrix))))
 
 (defn- draw-elements [gl primitive]
   (let [indices (:indices primitive)]
@@ -224,3 +198,25 @@
 
 (defn set-view-matrix! [m]
   (swap! gl-state assoc :view-matrix m))
+
+(defn set-projection-matrix! [m]
+  (swap! gl-state assoc :projection-matrix m))
+
+(defn init-webgl [canvas]
+  (let [gl (.getContext canvas "webgl2")]
+    (init-gl-state gl)
+    (when-not gl
+      (throw (js/Error. "WebGL 2.0 not available")))
+    (.viewport gl
+               0
+               0
+               (-> gl .-canvas .-width)
+               (-> gl .-canvas .-height))
+    (.clearColor gl 0 0 0 1)
+    ; Cull back facing triangles. The default winding order is counter-clockwise,
+    ; meaning that the "front" face is the one where vertices are drawn in a counter-clockwise
+    ; order.
+    (.enable gl (.-CULL_FACE gl))
+    (.enable gl (.-DEPTH_TEST gl))
+    (gl-utils/recompile-shaders gl gl-state)))
+

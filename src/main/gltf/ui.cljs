@@ -33,24 +33,34 @@
 (def LINE-HEIGHT 20)
 (def INITIAL-STATE {:line -1})
 
+(defn resize-canvas [width height]
+  (when-let [ctx (:context @ui-state)]
+    (let [canvas (.-canvas ctx)
+          scale js/devicePixelRatio]
+      ; https://developer.mozilla.org/en-US/docs/Web/API/Window/devicePixelRatio
+      (set! (.-width canvas) (js/Math.floor (* scale width)))
+      (set! (.-height canvas) (js/Math.floor (* scale height)))
+      (.setTransform ctx 1 0 0 1 0 0)
+      (.scale ctx scale scale))))
+
 (defn init [canvas]
   (let [ctx (.getContext canvas "2d")]
-    ; TODO don't hardcode this.
-    (.scale ctx 1.25 1.25)
+    (reset! ui-state (merge {:context ctx} INITIAL-STATE))
+    (resize-canvas (-> ctx .-canvas .-clientWidth)
+                   (-> ctx .-canvas .-clientHeight))))
+
+(defn clear []
+  (when-let [ctx (:context @ui-state)]
     (set! (.-fillStyle ctx) "white")
     (set! (.-font ctx) "18px consolas")
     (set! (.-textBaseline ctx) "top")
-    (reset! ui-state (merge {:context ctx} INITIAL-STATE))))
+    (.clearRect ctx 0 0
+                (-> ctx .-canvas .-width)
+                (-> ctx .-canvas .-height))
+    (swap! ui-state merge INITIAL-STATE)))
 
 (defn debug [text]
   (when-let [ctx (:context @ui-state)]
     (let [line (inc (:line @ui-state))]
       (.fillText ctx text 0 (* LINE-HEIGHT line))
       (swap! ui-state assoc :line line))))
-
-(defn clear []
-  (when-let [ctx (:context @ui-state)]
-    (.clearRect ctx 0 0
-                (-> ctx .-canvas .-width)
-                (-> ctx .-canvas .-height))
-    (swap! ui-state merge INITIAL-STATE)))
