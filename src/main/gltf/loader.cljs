@@ -105,9 +105,12 @@
         (update :sampler #(get-in data [:samplers %])))))
 
 (defn- resolve-pbr [data pbr]
-  (-> pbr
-      (update :baseColorTexture #(resolve-texture data (:index %)))
-      (update :metallicRoughnessTexture #(resolve-texture data (:index %)))))
+  (cond-> pbr
+    (contains? pbr :baseColorTexture)
+    (update :baseColorTexture #(resolve-texture data (:index %)))
+
+    (contains? pbr :metallicRoughnessTexture)
+    (update :metallicRoughnessTexture #(resolve-texture data (:index %)))))
 
 (defn- resolve-material [data material-id]
   (let [material (get-in data [:materials material-id])]

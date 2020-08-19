@@ -64,3 +64,20 @@
     (let [line (inc (:line @ui-state))]
       (.fillText ctx text 0 (* LINE-HEIGHT line))
       (swap! ui-state assoc :line line))))
+
+(defn average [x [values sum]]
+  (let [target-samples 120
+        values (or values #queue[])
+        sum (or sum 0)
+
+        [new-sum new-values]
+        (if (< (count values) target-samples)
+          [(+ sum x) (conj values x)]
+          [(- (+ sum x) (peek values)) (conj (pop values) x)])
+
+        avg
+        (/ new-sum (count new-values))]
+    [avg [new-values new-sum]]))
+
+
+

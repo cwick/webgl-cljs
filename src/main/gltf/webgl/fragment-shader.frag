@@ -8,6 +8,7 @@ out vec4 outColor;
 in vec4 worldPosition;
 in vec2 texcoord_0;
 uniform sampler2D u_texture0;
+uniform vec4 u_baseColor;
 
 vec4 gammaCorrect(vec4 c) {
   float gamma = 2.2;
@@ -24,7 +25,11 @@ void main() {
   vec3 faceNormal = normalize( cross( xTangent, yTangent ) );
   float lightValue = smoothstep(-1.0, 1.0, faceNormal.y);
 
-  outColor = vec4(lightValue * vec3(texture(u_texture0, texcoord_0)), 1.0);
+  // TODO: deal with alpha channel
+  outColor = vec4(
+    lightValue * 
+    vec3(texture(u_texture0, texcoord_0)) * vec3(u_baseColor)
+    , 1.0);
 
   // TODO: only gamma correct if we have to
   outColor = gammaCorrect(outColor);

@@ -75,6 +75,8 @@
       (dissoc :vertex-arrays)
       (assoc :scene scene)))
 
+(defonce draw-time-values (atom nil))
+
 (defn- print-debug-info [start-time]
   (ui/debug
    (str "Meshes: " (-> @gl-state :stats :mesh-count)
@@ -83,7 +85,10 @@
         " Buffers: " (count (-> @gl-state :buffers))
         " Textures: " (count (-> @gl-state :texture-buffers))
         " VAO: " (count (-> @gl-state :vertex-arrays))))
-  (ui/debug (str "Draw time: " (.toFixed (- (js/performance.now) start-time) 2) "ms")))
+  (let [draw-time (- (js/performance.now) start-time)
+        [draw-time-average values] (ui/average draw-time @draw-time-values)]
+    (reset! draw-time-values values)
+    (ui/debug (str "Draw time: " (.toFixed draw-time-average 2) "ms"))))
 
 (defn- vertex-attrib-pointer [gl accessor attribute-name]
   (let [component-counts {:SCALAR 1
@@ -117,7 +122,7 @@
   (let [transform-location (gl-utils/get-uniform-location gl gl-state "u_transform")]
     (.uniformMatrix4fv gl transform-location false matrix)))
 
-(defn- bind-uniforms [gl]
+(defn- bind-scene-uniforms [gl]
   (let [projection (gl-utils/get-uniform-location gl gl-state "u_projection")
         view (gl-utils/get-uniform-location gl gl-state "u_view")
         texcoord-0 (gl-utils/get-uniform-location gl gl-state "u_texture0")]
@@ -151,10 +156,19 @@
       (.activeTexture gl (.-TEXTURE0 gl))
       (.bindTexture gl (.-TEXTURE_2D gl) gl-texture))))
 
+(defn- bind-material [gl primitive]
+  (bind-textures gl primitive)
+  (let [default-base-color #js[1 1 1 1]
+        base-color (get-in primitive
+                           [:material :pbrMetallicRoughness :baseColorFactor]
+                           default-base-color)
+        base-color-location (gl-utils/get-uniform-location gl gl-state "u_baseColor")]
+    (.uniform4fv gl base-color-location base-color)))
+
 (defn- draw-primitive [gl primitive]
   (swap! gl-state update-in [:stats :primitive-count] inc)
   (bind-vertex-array gl primitive)
-  (bind-textures gl primitive)
+  (bind-material gl primitive)
 
   (if (-> primitive :material :doubleSided)
     (.disable gl (.-CULL_FACE gl))
@@ -192,7 +206,7 @@
         (swap! gl-state setup-new-scene gl scene))
       (swap! gl-state dissoc :stats)
       (.clear gl (bit-or (.-DEPTH_BUFFER_BIT gl) (.-COLOR_BUFFER_BIT gl)))
-      (bind-uniforms gl)
+      (bind-scene-uniforms gl)
       (doseq [node (:nodes scene)]
         (draw-node gl node))
       (print-debug-info start-time))))
