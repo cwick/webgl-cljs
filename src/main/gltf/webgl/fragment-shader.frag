@@ -28,7 +28,8 @@ void main() {
   // TODO: deal with alpha channel
   outColor = vec4(
     lightValue * 
-    vec3(texture(u_texture0, texcoord_0)) * vec3(u_baseColor)
+    vec3(texture(u_texture0, texcoord_0)) * 
+    vec3(u_baseColor)
     , 1.0);
 
   // TODO: only gamma correct if we have to

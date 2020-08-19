@@ -150,11 +150,31 @@
       (bind-vertex-attribute gl primitive :TEXCOORD_0)
       (swap! gl-state assoc-in [:vertex-arrays primitive] gl-vao))))
 
+(defn- get-default-texture
+  "Generate a 1x1 white texture, used when material doesn't have a base color texture"
+  [gl]
+  (if-let [gl-texture (:default-texture @gl-state)]
+    gl-texture
+    (let [gl-texture (.createTexture gl)]
+      (.bindTexture gl (.-TEXTURE_2D gl) gl-texture)
+      (swap! gl-state assoc :default-texture gl-texture)
+      (.texImage2D gl
+                   (.-TEXTURE_2D gl)
+                   0 ; mip level
+                   (.-RGBA gl) ; internal format
+                   1 ; width
+                   1 ; height
+                   0 ; border. Must be 0
+                   (.-RGBA gl) ; format
+                   (.-UNSIGNED_BYTE gl) ; type
+                   (js/Uint8Array.from #js[255 255 255 255]))
+      gl-texture)))
+
 (defn- bind-textures [gl primitive]
-  (when-let [texture (get-in primitive [:material :pbrMetallicRoughness :baseColorTexture])]
-    (let [gl-texture (get-gl-texture gl texture)]
-      (.activeTexture gl (.-TEXTURE0 gl))
-      (.bindTexture gl (.-TEXTURE_2D gl) gl-texture))))
+  (let [texture (get-in primitive [:material :pbrMetallicRoughness :baseColorTexture])
+        gl-texture (if texture (get-gl-texture gl texture) (get-default-texture gl))]
+    (.activeTexture gl (.-TEXTURE0 gl))
+    (.bindTexture gl (.-TEXTURE_2D gl) gl-texture)))
 
 (defn- bind-material [gl primitive]
   (bind-textures gl primitive)
