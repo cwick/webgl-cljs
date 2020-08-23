@@ -21,18 +21,18 @@
          :last-frame-time nil}))
 
 (defn- create-default-scene []
-  (let [texture-scale 100
+  (let [texture-scale 50
         vertex-data
         (js/Float32Array.from
          #js[; Positions
              ; Triangle A
-             0.5 0 0.5
-             -0.5 0 -0.5
-             -0.5 0 0.5
+             1.0 0 1.0
+             -1.0 0 -1.0
+             -1.0 0 1.0
              ; Triangle B
-             0.5 0 0.5
-             0.5 0 -0.5
-             -0.5 0 -0.5
+             1.0 0 1.0
+             1.0 0 -1.0
+             -1.0 0 -1.0
 
              ; UVs
              ; Triangle A
