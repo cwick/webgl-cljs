@@ -2,7 +2,6 @@
   (:require
    [goog.math :refer [toRadians]]
    [goog.vec.vec3f :as vec3]
-   [goog.vec.Quaternion :as quat]
    [goog.vec.mat4f :as mat4]))
 
 (defn- apply-velocity [pos velocity time]
@@ -13,8 +12,10 @@
 
 (defn- move-camera [camera orientation time]
   (let [impulse (:impulse camera)
-        forward (quat/transformVec #js[0 0 -1] orientation (vec3/create))
-        right (quat/transformVec #js[1 0 0] orientation (vec3/create))
+        ; Extract forward and right vectors from the rotation matrix
+        ; https://community.khronos.org/t/get-direction-from-transformation-matrix-or-quat/65502/2
+        forward (as-> (mat4/getColumn orientation 2 (vec3/create)) v (vec3/negate v v))
+        right (mat4/getColumn orientation 0 (vec3/create))
         forward-velocity (vec3/scale forward (impulse 0) (vec3/create))
         right-velocity (vec3/scale right (impulse 1) (vec3/create))
         velocity (vec3/add forward-velocity right-velocity (vec3/create))]
@@ -25,11 +26,12 @@
            :position (apply-velocity (:position camera) velocity time))))
 
 (defn update-camera [camera time]
-  (let [orientation (as-> (quat/createIdentityFloat32) q
-                      (quat/rotateY q (toRadians (- (:yaw camera))) q)
-                      (quat/rotateX q (toRadians (:pitch camera)) q))
+  (let [orientation (as-> (mat4/createIdentity) m
+                      (mat4/rotateY m (toRadians (- (:yaw camera))))
+                      (mat4/rotateX m (toRadians (:pitch camera))))
         camera (move-camera camera orientation time)
-        camera-matrix (mat4/makeRotationTranslation (mat4/create) orientation (:position camera))
-        view-matrix (as-> (mat4/createIdentity) q
-                      (do (mat4/invert camera-matrix q) q))]
+        [x y z] (:position camera)
+        ; Inverse of pure rotation matrix is its transpose
+        view-matrix (as-> (mat4/transpose orientation (mat4/create)) m
+                      (mat4/translate m (- x) (- y) (- z)))]
     (assoc camera :view-matrix view-matrix)))
