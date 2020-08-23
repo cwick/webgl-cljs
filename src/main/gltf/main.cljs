@@ -14,7 +14,7 @@
 (defonce game-state
   (atom {:camera {:yaw 0
                   :pitch 0
-                  :position [0 0 3.5]
+                  :position [0 1 3.5]
                   :velocity [0 0 0]
                   :impulse [0 0]}
          :buttons #{}
@@ -22,17 +22,17 @@
 
 (defn- load-model [gltf base-url]
   (-> (gltf.loader/load-gltf gltf base-url)
-      (.then #(swap! app-state assoc :model % :gltf gltf))))
+      (.then #(swap! app-state assoc :scene % :gltf gltf))))
 
 (defn App [state]
   [:<>
    [ui/SelectModel {:on-select load-model}]
    [datafrisk/DataFriskShell
     (:gltf @state)
-    (:model @state)]])
+    (:scene @state)]])
 
 (defn- draw-model []
-  (when-let [model (:model @app-state)]
+  (when-let [model (:scene @app-state)]
     (gl/set-view-matrix! (get-in @game-state [:camera :view-matrix]))
     (gl/draw model)))
 
@@ -100,12 +100,80 @@
             (ui/resize-canvas width height)))]
     (.observe observer canvas)))
 
+(defn- create-initial-scene []
+  (let [texture-scale 10
+        vertex-data
+        (js/Float32Array.from
+         #js[; Positions
+             ; Triangle A
+             0.5 0 0.5
+             -0.5 0 -0.5
+             -0.5 0 0.5
+             ; Triangle B
+             0.5 0 0.5
+             0.5 0 -0.5
+             -0.5 0 -0.5
+
+             ; UVs
+             ; Triangle A
+             texture-scale texture-scale
+             0 0
+             0 texture-scale
+             ; Triangle B
+             texture-scale texture-scale
+             texture-scale 0
+             0 0])
+        vertex-buffer
+        {:data (.-buffer vertex-data)}
+        vertex-buffer-view
+        {:byteLength (+ (* 6 3 4) (* 6 2 4))
+         :buffer vertex-buffer
+         :byteOffset 0
+         :byteStride 0
+         :target :ARRAY_BUFFER}
+        position-attribute
+        {:byteOffset 0
+         :componentType :FLOAT
+         :type :VEC3
+         :count 6
+         :bufferView vertex-buffer-view}
+        texcoord-attribute
+        {:byteOffset (* 6 3 4)
+         :componentType :FLOAT
+         :type :VEC2
+         :count 6
+         :bufferView vertex-buffer-view}
+        texture
+        {:sampler {:minFilter 9728 :magFilter 9728}
+         :source {:width 2
+                  :height 2
+                  :data (js/Uint8Array.from
+                         #js[255 255 255 255
+                             0 0 0 255
+                             0 0 0 255
+                             255 255 255 255])}}
+        material
+        {:pbrMetallicRoughness {:baseColorTexture texture :baseColorFactor [0.75 0.7 0.7 1.0]}}]
+    {:nodes
+     [{:name "Floor"
+       :matrix (as-> (mat4/createIdentity) m
+                 (mat4/translate m 0 0 0)
+                 (mat4/scale m 10 10 10))
+       :mesh {:name "Floor"
+              :primitives
+              [{:attributes
+                {:POSITION position-attribute
+                 :TEXCOORD_0 texcoord-attribute}
+                :mode :TRIANGLES
+                :material material}]}}]}))
+
 (defn init []
   (start)
   (rdom/render
    [App app-state]
    (js/document.getElementById "app"))
 
+  (swap! app-state assoc :scene (create-initial-scene))
   (let [canvas (js/document.getElementById "canvas")
         ui-canvas (js/document.getElementById "ui-canvas")]
     (ui/init ui-canvas)

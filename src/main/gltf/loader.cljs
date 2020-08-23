@@ -17,7 +17,10 @@
                    (.addEventListener
                     js-image
                     "load"
-                    #(resolve (assoc image :data js-image)))))))
+                    #(resolve (assoc image
+                                     :data js-image
+                                     :width (.-width js-image)
+                                     :height (.-height js-image))))))))
 
 (defn- load-assets [data base-url]
   (let [buffer-promises (js/Promise.all (map #(load-buffer % base-url) (:buffers data)))
@@ -29,14 +32,12 @@
                         :images (into [] images)))))))
 
 (defn- resolve-buffer [data buffer-id]
-  (-> (get-in data [:buffers buffer-id])
-      (assoc :id buffer-id)))
+  (get-in data [:buffers buffer-id]))
 
 (defn- resolve-buffer-view [data buffer-view-id]
   (let [buffer-view (get-in data [:bufferViews buffer-view-id])]
     (-> (assoc buffer-view
                :buffer (resolve-buffer data (:buffer buffer-view))
-               :id buffer-view-id
                :byteStride (or (:byteStride buffer-view) 0)
                :byteOffset (or (:byteOffset buffer-view) 0)
                :target (condp = (:target buffer-view)
@@ -51,7 +52,6 @@
   (let [accessor (get-in data [:accessors accessor-id])]
     (assoc accessor
            :bufferView (resolve-buffer-view data (:bufferView accessor))
-           :id accessor-id
            :byteOffset (or (:byteOffset accessor) 0)
            :type (keyword (:type accessor))
            :normalized (or (:normalized accessor) false)
@@ -95,8 +95,7 @@
 
 (defn- resolve-mesh [data mesh-id]
   (let [mesh (get-in data [:meshes mesh-id])]
-    (-> (update mesh :primitives #(resolve-primitives data %))
-        (assoc :id mesh-id))))
+    (update mesh :primitives #(resolve-primitives data %))))
 
 (defn- resolve-texture [data texture-id]
   (let [texture (get-in data [:textures texture-id])]
@@ -131,8 +130,7 @@
       (resolve-all-meshes)))
 
 (defn- resolve-camera [data camera-id]
-  (let [camera (get-in data [:cameras camera-id])]
-    (assoc camera :id camera-id)))
+  (get-in data [:cameras camera-id]))
 
 (declare resolve-node)
 (defn- resolve-children [data children]
@@ -166,7 +164,6 @@
 
        (:matrix node)
        (assoc! :matrix (apply mat4/setFromValues (mat4/create) (:matrix node))))
-     (assoc! :id node-id)
      (dissoc! :translation :rotation :scale)
      (persistent!))))
 

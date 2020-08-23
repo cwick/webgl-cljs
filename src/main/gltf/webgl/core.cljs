@@ -10,6 +10,21 @@
 (defn- init-gl-state [gl]
   (reset! gl-state {:gl gl}))
 
+(defn- upload-texture-image [gl image]
+  ; Images must be converted from sRGB to linear space
+  ; See https://www.khronos.org/registry/OpenGL-Refpages/es3.0/html/glTexImage2D.xhtml
+  ; See https://github.com/KhronosGroup/glTF/tree/master/specification/2.0#metallic-roughness-material
+  (.texImage2D gl
+               (.-TEXTURE_2D gl)
+               0 ; mip level
+               (.-SRGB8_ALPHA8 gl) ; internal format
+               (:width image) ; width
+               (:height image) ; height
+               0 ; border. Must be 0
+               (.-RGBA gl) ; format
+               (.-UNSIGNED_BYTE gl) ; type
+               (:data image)))
+
 (defn- get-gl-texture [gl texture]
   (if-let [gl-texture (get-in @gl-state [:texture-buffers texture])]
     gl-texture
@@ -23,16 +38,7 @@
       ; See https://github.com/KhronosGroup/glTF/tree/master/specification/2.0#images
       (.pixelStorei gl (.-UNPACK_COLORSPACE_CONVERSION_WEBGL gl) (.-NONE gl))
       (swap! gl-state assoc-in [:texture-buffers texture] gl-texture)
-      ; Images must be converted from sRGB to linear space
-      ; See https://www.khronos.org/registry/OpenGL-Refpages/es3.0/html/glTexImage2D.xhtml
-      ; See https://github.com/KhronosGroup/glTF/tree/master/specification/2.0#metallic-roughness-material
-      (.texImage2D gl
-                   (.-TEXTURE_2D gl)
-                   0 ; mip level
-                   (.-SRGB8_ALPHA8 gl) ; internal format
-                   (.-RGBA gl) ; format
-                   (.-UNSIGNED_BYTE gl) ; type
-                   (-> texture :source :data))
+      (upload-texture-image gl (:source texture))
       (when (contains? #{(.-LINEAR_MIPMAP_NEAREST gl)
                          (.-NEAREST_MIPMAP_LINEAR gl)
                          (.-NEAREST_MIPMAP_NEAREST gl)
@@ -158,16 +164,7 @@
     (let [gl-texture (.createTexture gl)]
       (.bindTexture gl (.-TEXTURE_2D gl) gl-texture)
       (swap! gl-state assoc :default-texture gl-texture)
-      (.texImage2D gl
-                   (.-TEXTURE_2D gl)
-                   0 ; mip level
-                   (.-RGBA gl) ; internal format
-                   1 ; width
-                   1 ; height
-                   0 ; border. Must be 0
-                   (.-RGBA gl) ; format
-                   (.-UNSIGNED_BYTE gl) ; type
-                   (js/Uint8Array.from #js[255 255 255 255]))
+      (upload-texture-image gl {:width 1 :height 1 :data (js/Uint8Array.from #js[255 255 255 255])})
       gl-texture)))
 
 (defn- bind-textures [gl primitive]
@@ -189,7 +186,6 @@
   (swap! gl-state update-in [:stats :primitive-count] inc)
   (bind-vertex-array gl primitive)
   (bind-material gl primitive)
-
   (if (-> primitive :material :doubleSided)
     (.disable gl (.-CULL_FACE gl))
     (.enable gl (.-CULL_FACE gl)))
