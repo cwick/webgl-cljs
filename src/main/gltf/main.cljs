@@ -2,6 +2,7 @@
                         [reagent.dom :as rdom]
                         [datafrisk.core :as datafrisk]
                         [gltf.loader]
+                        [gltf.controllers :as controllers]
                         [gltf.input :as input]
                         [gltf.webgl.core :as gl]
                         [gltf.ui :as ui]
@@ -16,7 +17,7 @@
                   :pitch 0
                   :position [0 1 3.5]
                   :velocity [0 0 0]
-                  :impulse [0 0]}
+                  :impulse [0 0 0]}
          :buttons #{}
          :last-frame-time nil}))
 
@@ -108,36 +109,17 @@
     (gl/set-view-matrix! (get-in @game-state [:camera :view-matrix]))
     (gl/draw model)))
 
+
 (defn- handle-mouse-input [dx dy]
-  (let [sensitivity 0.1
-        camera (:camera @game-state)
-        clamp #(max -90 (min 90 %))]
-    (->>
-     (-> camera
-         (update :yaw #(mod (+ % (* dx sensitivity)) 360))
-         (update :pitch #(clamp (+ % (* dy sensitivity)))))
-     (swap! game-state assoc :camera))))
+  (let [camera-motions (controllers/handle-mouse-input dx dy)]
+    (swap! game-state update :camera
+           #(-> %
+                (update :yaw-delta + (:yaw-delta camera-motions))
+                (update :pitch-delta + (:pitch-delta camera-motions))))))
 
 (defn- handle-keyboard-input [pressed-buttons]
-  (let [impulse
-        (cond-> [0 0]
-          (contains? pressed-buttons "KeyW")
-          (update 0 inc)
-          (contains? pressed-buttons "KeyS")
-          (update 0 dec)
-          (contains? pressed-buttons "KeyD")
-          (update 1 inc)
-          (contains? pressed-buttons "KeyA")
-          (update 1 dec))
-        camera-speed 10
-        normalized-impulse (if (= impulse [0 0])
-                             #js[0 0]
-                             (vec2/normalize (clj->js impulse) (vec2/create)))
-        scaled-impulse (vec2/scale normalized-impulse camera-speed (vec2/create))]
-    (swap! game-state
-           #(-> %
-                (assoc-in [:camera :impulse] [(aget scaled-impulse 0) (aget scaled-impulse 1)])
-                (assoc :buttons pressed-buttons)))))
+  (let [impulse (controllers/handle-keyboard-input pressed-buttons)]
+    (swap! game-state assoc-in [:camera :impulse] impulse)))
 
 (defn ^:dev/after-load start []
   (gl/recompile-shaders)
