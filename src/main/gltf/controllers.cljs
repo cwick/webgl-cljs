@@ -17,9 +17,9 @@
           (update :x-delta inc)
           (contains? pressed-buttons "KeyA")
           (update :x-delta dec)
-          (contains? pressed-buttons "KeyQ")
-          (update :y-delta inc)
           (contains? pressed-buttons "KeyE")
+          (update :y-delta inc)
+          (contains? pressed-buttons "KeyQ")
           (update :y-delta dec))
         impulse-vector [(:x-delta impulse) (:y-delta impulse) (:z-delta impulse)]]
     (if (= [0 0 0] impulse-vector)
