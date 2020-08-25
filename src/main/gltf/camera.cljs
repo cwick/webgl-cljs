@@ -3,8 +3,9 @@
    [gltf.math.mat4 :as mat4]
    [gltf.math.vec3 :as vec3]))
 
-(defn- move-camera [camera orientation time]
+(defn- update-velocity [camera time]
   (let [camera-speed 10
+        orientation (:orientation camera)
         [impulse-x impulse-y impulse-z] (map #(* camera-speed %) (:impulse camera))
         ; Extract forward and right vectors from the rotation matrix
         ; https://community.khronos.org/t/get-direction-from-transformation-matrix-or-quat/65502/2
@@ -13,13 +14,18 @@
         forward-velocity (vec3/scale forward impulse-z)
         right-velocity (vec3/scale right impulse-x)
         up-velocity (vec3/scale (vec3/create 0 1 0) impulse-y)
-        velocity (vec3/add  forward-velocity right-velocity up-velocity)]
+        velocity (vec3/add forward-velocity right-velocity up-velocity)]
     (assoc camera
-           :look forward
-           :velocity velocity
-           :position (vec3/scale-and-add (:position camera) velocity time))))
+           :velocity velocity)))
 
-(defn- update-orientation
+(defn- move-camera [camera time]
+  (let [camera (update-velocity camera time)
+        velocity (:velocity camera)
+        position (:position camera)]
+    (assoc camera
+           :position (vec3/scale-and-add position velocity time))))
+
+(defn- update-pitch-yaw
   "Adjust yaw/pitch based on desired change"
   [camera]
   (letfn [(clamp [x] (max (- (/ js/Math.PI 2))
@@ -29,20 +35,25 @@
       (-> (update :yaw #(mod
                          (+ % (:yaw-delta camera))
                          (* 2 js/Math.PI)))
+          ; TODO: cancel pitch and yaw somewhere else?
           (dissoc :yaw-delta))
 
       (some? (:pitch-delta camera))
       (-> (update :pitch #(clamp (+ % (:pitch-delta camera))))
           (dissoc :pitch-delta)))))
 
+(defn- update-orientation [camera]
+  (-> (update-pitch-yaw camera)
+      (assoc :orientation
+             (-> (mat4/create-identity)
+                 (mat4/rotate-y! (- (:yaw camera)))
+                 (mat4/rotate-x! (:pitch camera))))))
+
 (defn update-camera [camera time]
-  (let [camera (update-orientation camera)
-        orientation (-> (mat4/create-identity)
-                        (mat4/rotate-y! (- (:yaw camera)))
-                        (mat4/rotate-x! (:pitch camera)))
-        camera (move-camera camera orientation time)
+  (let [camera (-> (update-orientation camera)
+                   (move-camera time))
         [x y z] (:position camera)
         ; Inverse of pure rotation matrix is its transpose
-        view-matrix (-> (mat4/transpose orientation)
+        view-matrix (-> (mat4/transpose (:orientation camera))
                         (mat4/translate! (- x) (- y) (- z)))]
     (assoc camera :view-matrix view-matrix)))

@@ -2,12 +2,15 @@
                     [goog.vec.vec3f :as gvec3]))
 
 (deftype Vec3 [data]
+  Object
+  (toString [_] (str "["
+                     (aget data 0) " "
+                     (aget data 1) " "
+                     (aget data 2) "]"))
+
   IPrintWithWriter
-  (-pr-writer [o writer _]
-    (-write writer (str "["
-                        (aget data 0) " "
-                        (aget data 1) " "
-                        (aget data 2) "]")))
+  (-pr-writer [this writer _]
+    (-write writer (.toString this)))
 
   IIndexed
   (-nth [_ n] (aget data n))
