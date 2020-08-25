@@ -1,11 +1,11 @@
 (ns gltf.webgl.core (:require
                      [gltf.webgl.utils :as gl-utils]
                      [gltf.ui :as ui]
-                     [goog.vec.mat4f :as mat4]))
+                     [gltf.math.mat4 :as mat4]))
 
 (defonce gl-state (atom nil))
 
-(def identity-matrix (mat4/createIdentity))
+(def identity-matrix (mat4/create-identity))
 
 (defn- init-gl-state [gl]
   (reset! gl-state {:gl gl}))
@@ -126,15 +126,15 @@
 
 (defn- set-transform-matrix! [gl matrix]
   (let [transform-location (gl-utils/get-uniform-location gl gl-state "u_transform")]
-    (.uniformMatrix4fv gl transform-location false matrix)))
+    (.uniformMatrix4fv gl transform-location false (mat4/data matrix))))
 
 (defn- bind-scene-uniforms [gl]
   (let [projection (gl-utils/get-uniform-location gl gl-state "u_projection")
         view (gl-utils/get-uniform-location gl gl-state "u_view")
         texcoord-0 (gl-utils/get-uniform-location gl gl-state "u_texture0")]
     (.uniform1i gl texcoord-0 0)
-    (.uniformMatrix4fv gl view false (:view-matrix @gl-state identity-matrix))
-    (.uniformMatrix4fv gl projection false (:projection-matrix @gl-state identity-matrix))))
+    (.uniformMatrix4fv gl view false (mat4/data (:view-matrix @gl-state identity-matrix)))
+    (.uniformMatrix4fv gl projection false (mat4/data (:projection-matrix @gl-state identity-matrix)))))
 
 (defn- draw-elements [gl primitive]
   (let [indices (:indices primitive)]
@@ -208,7 +208,7 @@
 
   ([gl node parent-transform]
    (let [local-transform (or (:matrix node) identity-matrix)
-         global-transform (mat4/multMat parent-transform local-transform (mat4/create))]
+         global-transform (mat4/mult-mat parent-transform local-transform)]
      (swap! gl-state update-in [:stats :node-count] inc)
      (when-let [mesh (:mesh node)]
        (set-transform-matrix! gl global-transform)

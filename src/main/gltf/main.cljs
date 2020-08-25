@@ -7,17 +7,17 @@
                         [gltf.webgl.core :as gl]
                         [gltf.ui :as ui]
                         [gltf.camera :as camera]
-                        [goog.vec.vec2f :as vec2]
-                        [goog.vec.mat4f :as mat4]))
+                        [gltf.math.vec3 :as vec3]
+                        [gltf.math.mat4 :as mat4]))
 
 (defonce app-state (r/atom {}))
 
 (defonce game-state
   (atom {:camera {:yaw 0
                   :pitch 0
-                  :position [0 1 3.5]
-                  :velocity [0 0 0]
-                  :impulse [0 0 0]}
+                  :position (vec3/create 0 1 3.5)
+                  :velocity (vec3/create)
+                  :impulse (vec3/create)}
          :buttons #{}
          :last-frame-time nil}))
 
@@ -77,9 +77,9 @@
         {:pbrMetallicRoughness {:baseColorTexture texture :baseColorFactor [0.75 0.7 0.7 1.0]}}]
     {:nodes
      [{:name "Floor"
-       :matrix (as-> (mat4/createIdentity) m
-                 (mat4/translate m 0 0 0)
-                 (mat4/scale m texture-scale texture-scale texture-scale))
+       :matrix (-> (mat4/create-identity)
+                   (mat4/translate! 0 0 0)
+                   (mat4/scale! texture-scale texture-scale texture-scale))
        :mesh {:name "Floor"
               :primitives
               [{:attributes
@@ -145,12 +145,11 @@
                 width (.-width rect)
                 height (.-height rect)]
             (gl/set-projection-matrix!
-             (mat4/makePerspective
-              (mat4/create)
-              (* 50 (/ js/Math.PI 180))
-              (/ width height)
-              0.1
-              10000))
+             (mat4/create-perspective
+              (* 50 (/ js/Math.PI 180)) ; fov-y
+              (/ width height) ; aspect
+              0.1 ; near
+              10000)) ; far
             (ui/resize-canvas width height)))]
     (.observe observer canvas)))
 

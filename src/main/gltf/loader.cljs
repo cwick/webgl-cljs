@@ -1,5 +1,6 @@
 (ns gltf.loader (:require [goog.uri.utils :as uri]
-                          [goog.vec.mat4f :as mat4]
+                          [gltf.math.mat4 :as mat4]
+                          [gltf.math.vec3 :as vec3]
                           [goog.vec.Quaternion :as quat]))
 
 (defn- load-buffer [buffer base-url]
@@ -137,14 +138,14 @@
   (map #(resolve-node data %) children))
 
 (defn- get-transformation-matrix [node]
+  (let [{:keys [rotation translation scale]} node]
   ; TRS properties are converted to matrices and postmultiplied in 
   ; the T * R * S order to compose the transformation matrix; 
   ; first the scale is applied to the vertices, then the rotation, and then the translation.
-  (mat4/makeRotationTranslationScale
-   (mat4/create)
-   (or (clj->js (:rotation node)) (quat/createIdentityFloat32))
-   (or (clj->js (:translation node)) #js[0 0 0])
-   (or (clj->js (:scale node)) #js[1 1 1])))
+    (mat4/create-rotation-translation-scale
+     (or (clj->js rotation) (quat/createIdentityFloat32))
+     (if translation (apply vec3/create translation) (vec3/create))
+     (if scale (apply vec3/create scale) (vec3/create 1 1 1)))))
 
 (defn- resolve-node [data node-id]
   (let [node (transient (get-in data [:nodes node-id]))]
@@ -159,11 +160,11 @@
        (contains? node :camera)
        (assoc! :camera (resolve-camera data (:camera node)))
 
-       (some #(% node) [:translation :rotation :scale])
-       (assoc! :matrix (get-transformation-matrix node))
-
        (:matrix node)
-       (assoc! :matrix (apply mat4/setFromValues (mat4/create) (:matrix node))))
+       (assoc! :matrix (apply mat4/create (:matrix node)))
+
+       (some #(% node) [:translation :rotation :scale])
+       (assoc! :matrix (get-transformation-matrix node)))
      (dissoc! :translation :rotation :scale)
      (persistent!))))
 
