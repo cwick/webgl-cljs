@@ -16,11 +16,7 @@
         ; https://community.khronos.org/t/get-direction-from-transformation-matrix-or-quat/65502/2
         forward (as-> (mat4/getColumn orientation 2 (vec3/create)) v (vec3/negate v v))
         right (mat4/getColumn orientation 0 (vec3/create))
-        ; Move along X/Z plane, ignoring view direction
-        forward-velocity (vec3/scale
-                          (vec3/cross #js[0 1 0] right (vec3/create))
-                          impulse-z
-                          (vec3/create))
+        forward-velocity (vec3/scale forward impulse-z (vec3/create))
         right-velocity (vec3/scale right impulse-x (vec3/create))
         up-velocity (vec3/scale #js[0 1 0] impulse-y (vec3/create))
         velocity (as-> (vec3/create) velocity
