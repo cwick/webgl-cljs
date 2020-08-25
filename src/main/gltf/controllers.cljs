@@ -6,8 +6,6 @@
     {:yaw-delta (* dx sensitivity)
      :pitch-delta (* dy sensitivity)}))
 
-(#{"KeyS" "ShiftLeft"} "ShiftLeft")
-
 (defn handle-keyboard-input [pressed-buttons]
   (let [speed (if (pressed-buttons "ShiftLeft") 3 1)
         impulse
