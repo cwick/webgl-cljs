@@ -6,23 +6,35 @@
     {:yaw-delta (* dx sensitivity)
      :pitch-delta (* dy sensitivity)}))
 
+(#{"KeyS" "ShiftLeft"} "ShiftLeft")
+
 (defn handle-keyboard-input [pressed-buttons]
-  (let [impulse
+  (let [speed (if (pressed-buttons "ShiftLeft") 3 1)
+        impulse
         (cond-> {:x-delta 0 :y-delta 0 :z-delta 0}
-          (contains? pressed-buttons "KeyW")
+          (pressed-buttons "KeyW")
           (update :z-delta inc)
-          (contains? pressed-buttons "KeyS")
+
+          (pressed-buttons "KeyS")
           (update :z-delta dec)
-          (contains? pressed-buttons "KeyD")
+
+          (pressed-buttons "KeyD")
           (update :x-delta inc)
-          (contains? pressed-buttons "KeyA")
+
+          (pressed-buttons "KeyA")
           (update :x-delta dec)
-          (contains? pressed-buttons "KeyE")
+
+          (pressed-buttons "KeyE")
           (update :y-delta inc)
-          (contains? pressed-buttons "KeyQ")
+
+          (pressed-buttons "KeyQ")
           (update :y-delta dec))
-        impulse-vector [(:x-delta impulse) (:y-delta impulse) (:z-delta impulse)]]
-    (if (= [0 0 0] impulse-vector)
+        {:keys [x-delta y-delta z-delta]} impulse
+        impulse-vector (vec3/createFromValues x-delta y-delta z-delta)]
+    (if (== x-delta y-delta z-delta 0)
       [0 0 0]
-      (js->clj (vec3/normalize (clj->js impulse-vector) #js[])))))
+      (as-> impulse-vector v
+        (vec3/normalize v v)
+        (vec3/scale v speed v)
+        [(aget v 0) (aget v 1) (aget v 2)]))))
 
