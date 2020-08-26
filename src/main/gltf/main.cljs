@@ -16,9 +16,9 @@
   (atom {:camera {:yaw 0
                   :pitch 0
                   :position (vec3/create 0 1 3.5)
-                  :velocity (vec3/zero)
-                  :impulse (vec3/zero)}
-         :buttons #{}
+                  :velocity (vec3/zero)}
+         :input {:keyboard {:pressed-buttons #{}
+                            :impulse (vec3/zero)}}
          :last-frame-time nil}))
 
 (defn- create-default-scene []
@@ -97,6 +97,12 @@
                       :gltf gltf
                       :scene (update default-scene :nodes conj {:children (:nodes scene)}))))))
 
+(defn ^:dev/after-load start []
+  (gl/recompile-shaders)
+  (rdom/force-update-all))
+
+(defn ^:dev/before-load stop [])
+
 (defn App [state]
   [:<>
    [ui/SelectModel {:on-select load-model}]
@@ -116,15 +122,19 @@
                 (update :yaw-delta + (:yaw-delta camera-motions))
                 (update :pitch-delta + (:pitch-delta camera-motions))))))
 
-(defn- handle-keyboard-input [pressed-buttons]
-  (let [impulse (controllers/handle-keyboard-input pressed-buttons)]
-    (swap! game-state assoc-in [:camera :impulse] impulse)))
+(defn- handle-keyboard-input
+  "Called asynchronously when keyboard input is detected"
+  [pressed-buttons]
+  (swap! game-state assoc-in [:input :keyboard :pressed-buttons] pressed-buttons))
 
-(defn ^:dev/after-load start []
-  (gl/recompile-shaders)
-  (rdom/force-update-all))
+(defn- update-camera-impulse [camera game-state]
+  (assoc camera :impulse (-> game-state :input :keyboard :impulse)))
 
-(defn ^:dev/before-load stop [])
+(defn- update-game-state [old-state time-delta]
+  (-> old-state
+      (update-in [:input :keyboard] controllers/handle-keyboard-input time-delta)
+      (as-> state (update state :camera update-camera-impulse state))
+      (update :camera camera/update-camera time-delta)))
 
 (defn- main-loop [time]
   (let [time-seconds (/ time 1000)
@@ -134,8 +144,7 @@
       (ui/clear)
       (ui/draw-benchmark
        "Update time"
-       (fn []
-         (swap! game-state update :camera #(camera/update-camera % time-delta))))
+       #(swap! game-state update-game-state time-delta))
       (draw-model))
     (swap! game-state assoc :last-frame-time time-seconds)
     (js/requestAnimationFrame main-loop)))
