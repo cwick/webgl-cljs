@@ -19,28 +19,37 @@
   (-nth [_ n not-found] (or (aget data n) not-found))
 
   ISeqable
-  (-seq [_] (IndexedSeq. data 0 nil)))
+  (-seq [_] (IndexedSeq. data 0 nil))
+
+  ICloneable
+  (-clone [_] (Vec3. (gvec3/clone data))))
 
 (defn create
   ([] (Vec3. (gvec3/create)))
   ([x y z] (Vec3. (gvec3/createFromValues x y z))))
 
+(defn add! [v1 v2]
+  (gvec3/add (.-data v1) (.-data v2) (.-data v1))
+  v1)
+
 (defn add
   ([v1 v2]
-   (Vec3.
-    (gvec3/add (.-data v1) (.-data v2) (gvec3/create))))
+   (add! (clone v1) v2))
   ([v1 v2 v3]
-   (Vec3. (as-> (gvec3/create) temp
-            (gvec3/add (.-data v1) (.-data v2) temp)
-            (gvec3/add (.-data v3) temp temp)))))
+   (-> (clone v1)
+       (add! v2)
+       (add! v3))))
 
 (defn negate [v]
   (Vec3.
    (gvec3/negate (.-data v) (gvec3/create))))
 
+(defn scale! [v scalar]
+  (gvec3/scale (.-data v) scalar (.-data v))
+  v)
+
 (defn scale [v scalar]
-  (Vec3.
-   (gvec3/scale (.-data v) scalar (gvec3/create))))
+  (scale! (clone v) scalar))
 
 (defn scale-and-add [v1 v2 scalar]
   (Vec3. (as-> (gvec3/create) temp
@@ -50,10 +59,14 @@
 (declare zero?)
 (declare zero)
 
+(defn normalize! [v]
+  (if (zero? v)
+    zero
+    (do (gvec3/normalize (.-data v) (.-data v))
+        v)))
+
 (defn normalize [v]
-  (if (zero? v) zero
-      (Vec3.
-       (gvec3/normalize (.-data v) (gvec3/create)))))
+  (normalize! (clone v)))
 
 (defn magnitude-squared [v]
   (gvec3/magnitudeSquared (.-data v)))
@@ -70,3 +83,14 @@
 
 (def zero (create))
 (def world-up (create 0 1 0))
+
+(defn clamp! [v max-length]
+  (if (zero? v)
+    v
+    (if (> (magnitude-squared v) (* max-length max-length))
+      (-> (normalize! v)
+          (scale! max-length))
+      v)))
+
+(defn clamp [v max-length]
+  (clamp! (clone v) max-length))

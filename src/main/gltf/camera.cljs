@@ -1,12 +1,13 @@
 (ns gltf.camera
   (:require
    [gltf.math.mat4 :as mat4]
-   [gltf.math.vec3 :as vec3]))
+   [gltf.math.vec3 :as vec3]
+   [gltf.ui :as ui]))
 
-(defn- update-velocity [camera time]
-  (let [camera-speed 10
+(defn- update-velocity [camera]
+  (let [max-speed 10
         orientation (:orientation camera)
-        [impulse-x impulse-y impulse-z] (map #(* camera-speed %) (:impulse camera))
+        [impulse-x impulse-y impulse-z] (:impulse camera)
         ; Extract forward and right vectors from the rotation matrix
         ; https://community.khronos.org/t/get-direction-from-transformation-matrix-or-quat/65502/2
         forward (-> (mat4/get-column orientation 2) (vec3/negate))
@@ -14,14 +15,17 @@
         forward-velocity (vec3/scale forward impulse-z)
         right-velocity (vec3/scale right impulse-x)
         up-velocity (vec3/scale (vec3/create 0 1 0) impulse-y)
-        velocity (vec3/add forward-velocity right-velocity up-velocity)]
+        velocity (-> (vec3/add forward-velocity right-velocity up-velocity)
+                     (vec3/scale! max-speed)
+                     (vec3/clamp! max-speed))]
     (assoc camera
            :velocity velocity)))
 
 (defn- move-camera [camera time]
-  (let [camera (update-velocity camera time)
+  (let [camera (update-velocity camera)
         velocity (:velocity camera)
         position (:position camera)]
+    (ui/debug (vec3/magnitude velocity))
     (assoc camera
            :position (vec3/scale-and-add position velocity time))))
 
