@@ -7,8 +7,7 @@
      :pitch-delta (* dy sensitivity)}))
 
 (defn handle-keyboard-input [pressed-buttons]
-  (let [speed (if (pressed-buttons "ShiftLeft") 3 1)
-        impulse
+  (let [impulse
         (cond-> {:x-delta 0 :y-delta 0 :z-delta 0}
           (pressed-buttons "KeyW")
           (update :z-delta inc)
@@ -27,11 +26,6 @@
 
           (pressed-buttons "KeyQ")
           (update :y-delta dec))
-        {:keys [x-delta y-delta z-delta]} impulse
-        impulse-vector (vec3/create x-delta y-delta z-delta)]
-    (if (== x-delta y-delta z-delta 0)
-      impulse-vector
-      (-> impulse-vector
-          (vec3/normalize)
-          (vec3/scale speed)))))
+        {:keys [x-delta y-delta z-delta]} impulse]
+    (vec3/create x-delta y-delta z-delta)))
 

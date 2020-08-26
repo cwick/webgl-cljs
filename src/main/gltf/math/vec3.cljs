@@ -64,7 +64,7 @@
 
 (defn normalize! [v]
   (if (zero? v)
-    zero
+    v
     (do (gvec3/normalize (.-data v) (.-data v))
         v)))
 
