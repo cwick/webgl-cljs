@@ -81,20 +81,13 @@
       (dissoc :vertex-arrays)
       (assoc :scene scene)))
 
-(defonce draw-time-values (atom nil))
-
-(defn- print-debug-info [start-time]
-  (ui/debug
-   (str "Meshes: " (-> @gl-state :stats :mesh-count)
-        " Primitives: " (-> @gl-state :stats :primitive-count)
-        " Nodes: " (-> @gl-state :stats :node-count)
-        " Buffers: " (count (-> @gl-state :buffers))
-        " Textures: " (count (-> @gl-state :texture-buffers))
-        " VAO: " (count (-> @gl-state :vertex-arrays))))
-  (let [draw-time (- (js/performance.now) start-time)
-        [draw-time-average values] (ui/average draw-time @draw-time-values)]
-    (reset! draw-time-values values)
-    (ui/debug (str "Draw time: " (.toFixed draw-time-average 2) "ms"))))
+(defn- print-debug-info []
+  (ui/debug (str "Meshes: " (-> @gl-state :stats :mesh-count)
+                 " Primitives: " (-> @gl-state :stats :primitive-count)
+                 " Nodes: " (-> @gl-state :stats :node-count)
+                 " Buffers: " (count (-> @gl-state :buffers))
+                 " Textures: " (count (-> @gl-state :texture-buffers))
+                 " VAO: " (count (-> @gl-state :vertex-arrays)))))
 
 (defn- vertex-attrib-pointer [gl accessor attribute-name]
   (let [component-counts {:SCALAR 1
@@ -217,15 +210,17 @@
 
 (defn draw [scene]
   (when-let [gl (:gl @gl-state)]
-    (let [start-time (js/performance.now)]
-      (when-not (identical? scene (:scene @gl-state))
-        (swap! gl-state setup-new-scene gl scene))
-      (swap! gl-state dissoc :stats)
-      (.clear gl (bit-or (.-DEPTH_BUFFER_BIT gl) (.-COLOR_BUFFER_BIT gl)))
-      (bind-scene-uniforms gl)
-      (doseq [node (:nodes scene)]
-        (draw-node gl node))
-      (print-debug-info start-time))))
+    (ui/draw-benchmark
+     "Draw time"
+     (fn []
+       (when-not (identical? scene (:scene @gl-state))
+         (swap! gl-state setup-new-scene gl scene))
+       (swap! gl-state dissoc :stats)
+       (.clear gl (bit-or (.-DEPTH_BUFFER_BIT gl) (.-COLOR_BUFFER_BIT gl)))
+       (bind-scene-uniforms gl)
+       (doseq [node (:nodes scene)]
+         (draw-node gl node))))
+    (print-debug-info)))
 
 (defn recompile-shaders []
   (when-let [gl (:gl @gl-state)]

@@ -16,8 +16,8 @@
   (atom {:camera {:yaw 0
                   :pitch 0
                   :position (vec3/create 0 1 3.5)
-                  :velocity (vec3/create)
-                  :impulse (vec3/create)}
+                  :velocity vec3/zero
+                  :impulse vec3/zero}
          :buttons #{}
          :last-frame-time nil}))
 
@@ -109,7 +109,6 @@
     (gl/set-view-matrix! (get-in @game-state [:camera :view-matrix]))
     (gl/draw model)))
 
-
 (defn- handle-mouse-input [dx dy]
   (let [camera-motions (controllers/handle-mouse-input dx dy)]
     (swap! game-state update :camera
@@ -133,7 +132,10 @@
         time-delta (- time-seconds last-frame-time)]
     (when (> time-delta 0)
       (ui/clear)
-      (swap! game-state update :camera #(camera/update-camera % time-delta))
+      (ui/draw-benchmark
+       "Update time"
+       (fn []
+         (swap! game-state update :camera #(camera/update-camera % time-delta))))
       (draw-model))
     (swap! game-state assoc :last-frame-time time-seconds)
     (js/requestAnimationFrame main-loop)))

@@ -1,5 +1,7 @@
-(ns gltf.math.vec3 (:require
-                    [goog.vec.vec3f :as gvec3]))
+(ns gltf.math.vec3
+  (:refer-clojure :exclude [zero?])
+  (:require
+   [goog.vec.vec3f :as gvec3]))
 
 (deftype Vec3 [data]
   Object
@@ -45,6 +47,26 @@
            (gvec3/scale (.-data v2) scalar temp)
            (gvec3/add (.-data v1) temp temp))))
 
+(declare zero?)
+(declare zero)
+
 (defn normalize [v]
-  (Vec3.
-   (gvec3/normalize (.-data v) (gvec3/create))))
+  (if (zero? v) zero
+      (Vec3.
+       (gvec3/normalize (.-data v) (gvec3/create)))))
+
+(defn magnitude-squared [v]
+  (gvec3/magnitudeSquared (.-data v)))
+
+(defn magnitude [v]
+  (gvec3/magnitude (.-data v)))
+
+(defn zero? [v]
+  (let [data (.-data v)]
+    (== (aget data 0)
+        (aget data 1)
+        (aget data 2)
+        0)))
+
+(def zero (create))
+(def world-up (create 0 1 0))

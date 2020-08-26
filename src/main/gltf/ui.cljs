@@ -79,5 +79,20 @@
         (/ new-sum (count new-values))]
     [avg [new-values new-sum]]))
 
+(defn average! [x state]
+  (let [[result new-state] (average x @state)]
+    (reset! state new-state)
+    result))
 
+(defn benchmark [f & args]
+  (let [start-time (js/performance.now)]
+    (apply f args)
+    (- (js/performance.now) start-time)))
 
+(defonce benchmark-state (atom {}))
+
+(defn draw-benchmark [name f & args]
+  (let [state (@benchmark-state name (atom nil))
+        time (benchmark f args)]
+    (debug (str name ": " (.toFixed (average! time state) 2) "ms"))
+    (swap! benchmark-state assoc name state)))
