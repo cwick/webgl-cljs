@@ -10,11 +10,13 @@
         [impulse-x impulse-y impulse-z] (:impulse camera)
         ; Extract forward and right vectors from the rotation matrix
         ; https://community.khronos.org/t/get-direction-from-transformation-matrix-or-quat/65502/2
-        forward (-> (mat4/get-column orientation 2) (vec3/negate))
-        right (mat4/get-column orientation 0)
-        forward-velocity (vec3/scale forward impulse-z)
-        right-velocity (vec3/scale right impulse-x)
-        up-velocity (vec3/scale (vec3/create 0 1 0) impulse-y)
+        forward-velocity (-> (mat4/get-column orientation 2)
+                             (vec3/negate!)
+                             (vec3/scale! impulse-z))
+        right-velocity (-> (mat4/get-column orientation 0)
+                           (vec3/scale! impulse-x))
+        up-velocity (-> (vec3/world-up)
+                        (vec3/scale! impulse-y))
         velocity (-> (vec3/add forward-velocity right-velocity up-velocity)
                      (vec3/scale! max-speed)
                      (vec3/clamp! max-speed))]
@@ -25,7 +27,7 @@
   (let [camera (update-velocity camera)
         velocity (:velocity camera)
         position (:position camera)]
-    (ui/debug (vec3/magnitude velocity))
+    (ui/debug (str "V: " (.toFixed (vec3/magnitude velocity) 2)))
     (assoc camera
            :position (vec3/scale-and-add position velocity time))))
 

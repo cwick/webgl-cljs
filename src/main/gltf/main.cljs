@@ -16,8 +16,8 @@
   (atom {:camera {:yaw 0
                   :pitch 0
                   :position (vec3/create 0 1 3.5)
-                  :velocity vec3/zero
-                  :impulse vec3/zero}
+                  :velocity (vec3/zero)
+                  :impulse (vec3/zero)}
          :buttons #{}
          :last-frame-time nil}))
 

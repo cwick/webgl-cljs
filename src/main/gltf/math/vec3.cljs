@@ -40,9 +40,12 @@
        (add! v2)
        (add! v3))))
 
+(defn negate! [v]
+  (gvec3/negate (.-data v) (.-data v))
+  v)
+
 (defn negate [v]
-  (Vec3.
-   (gvec3/negate (.-data v) (gvec3/create))))
+  (negate! (clone v)))
 
 (defn scale! [v scalar]
   (gvec3/scale (.-data v) scalar (.-data v))
@@ -81,8 +84,8 @@
         (aget data 2)
         0)))
 
-(def zero (create))
-(def world-up (create 0 1 0))
+(defn zero [] (create))
+(defn world-up [] (create 0 1 0))
 
 (defn clamp! [v max-length]
   (if (zero? v)

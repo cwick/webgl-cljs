@@ -64,15 +64,19 @@
   (Mat4. (gmat4/multMat (.-data m1) (.-data m2) (gmat4/create))))
 
 (defn rotate-x! [m angle]
-  (Mat4. (gmat4/rotateX (.-data m) angle)))
+  (gmat4/rotateX (.-data m) angle)
+  m)
 
 (defn rotate-y! [m angle]
-  (Mat4. (gmat4/rotateY (.-data m) angle)))
+  (gmat4/rotateY (.-data m) angle)
+  m)
 
 (defn translate! [m x y z]
-  (Mat4. (gmat4/translate (.-data m) x y z)))
+  (gmat4/translate (.-data m) x y z)
+  m)
 
 (defn scale! [m x y z]
-  (Mat4. (gmat4/scale (.-data m) x y z)))
+  (gmat4/scale (.-data m) x y z)
+  m)
 
 (defn data [m] (.-data m))
