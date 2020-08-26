@@ -63,6 +63,9 @@
 (defn mult-mat [m1 m2]
   (Mat4. (gmat4/multMat (.-data m1) (.-data m2) (gmat4/create))))
 
+(defn mult-vec3 [m v]
+  (vec3/Vec3. (gmat4/multVec3 (.-data m) (.-data v) (gvec3/create))))
+
 (defn rotate-x! [m angle]
   (gmat4/rotateX (.-data m) angle)
   m)

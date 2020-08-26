@@ -13,14 +13,13 @@
 (defonce app-state (r/atom {}))
 
 (defonce game-state
-  (atom {:camera {:yaw 0
-                  :pitch 0
-                  :position (vec3/create 0 1 3.5)
-                  :velocity (vec3/zero)}
+  (atom {:camera (camera/create)
          :input {:keyboard {:pressed-buttons #{}
-                            :impulse (vec3/zero)}}
+                            :impulse (vec3/zero)}
+                 :mouse {:pressed-buttons #{}}}
          :last-frame-time nil}))
 
+; TODO put this somewhere else
 (defn- create-default-scene []
   (let [texture-scale 50
         vertex-data
@@ -115,6 +114,9 @@
     (gl/set-view-matrix! (get-in @game-state [:camera :view-matrix]))
     (gl/draw model)))
 
+(defn- handle-mouse-button-input [buttons]
+  (swap! game-state assoc-in [:input :mouse :pressed-buttons] buttons))
+
 (defn- handle-mouse-input [dx dy]
   (let [camera-motions (controllers/handle-mouse-input dx dy)]
     (swap! game-state update :camera
@@ -128,12 +130,15 @@
   (swap! game-state assoc-in [:input :keyboard :pressed-buttons] pressed-buttons))
 
 (defn- update-camera-impulse [camera game-state]
-  (assoc camera :impulse (-> game-state :input :keyboard :impulse)))
+  (assoc camera
+         :impulse (-> game-state :input :keyboard :impulse)
+         :orbit? (contains? (-> game-state :input :mouse :pressed-buttons) 2)))
 
 (defn- update-game-state [old-state time-delta]
   (-> old-state
       (update-in [:input :keyboard] controllers/handle-keyboard-input time-delta)
-      (as-> state (update state :camera update-camera-impulse state))
+      (as-> state
+            (update state :camera update-camera-impulse state))
       (update :camera camera/update-camera time-delta)))
 
 (defn- main-loop [time]
@@ -176,6 +181,8 @@
     (ui/init ui-canvas)
     (input/init ui-canvas)
     (input/on-mouse-move ui-canvas #'handle-mouse-input)
+    (input/on-mouse-down ui-canvas #'handle-mouse-button-input)
+    (input/on-mouse-up ui-canvas #'handle-mouse-button-input)
     (input/on-key-down ui-canvas #'handle-keyboard-input)
     (input/on-key-up ui-canvas #'handle-keyboard-input)
     (gl/init-webgl canvas)
