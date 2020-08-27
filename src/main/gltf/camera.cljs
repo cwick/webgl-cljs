@@ -1,19 +1,23 @@
 (ns gltf.camera
   (:require
    [gltf.math.mat4 :as mat4]
-   [gltf.math.vec3 :as vec3]
-   [gltf.ui :as ui]))
+   [gltf.math.vec3 :as vec3]))
+
+; Extract forward and right vectors from the rotation matrix
+; https://community.khronos.org/t/get-direction-from-transformation-matrix-or-quat/65502/2
+(defn- get-right-vector [camera]
+  (mat4/get-column (:orientation camera) 0))
+
+(defn- get-forward-vector [camera]
+  (-> (mat4/get-column (:orientation camera) 2)
+      (vec3/negate!)))
 
 (defn- update-velocity [camera]
   (let [max-speed 10
-        orientation (:orientation camera)
         [impulse-x impulse-y impulse-z] (:impulse camera)
-        ; Extract forward and right vectors from the rotation matrix
-        ; https://community.khronos.org/t/get-direction-from-transformation-matrix-or-quat/65502/2
-        forward-velocity (-> (mat4/get-column orientation 2)
-                             (vec3/negate!)
+        forward-velocity (-> (get-forward-vector camera)
                              (vec3/scale! impulse-z))
-        right-velocity (-> (mat4/get-column orientation 0)
+        right-velocity (-> (get-right-vector camera)
                            (vec3/scale! impulse-x))
         up-velocity (-> (vec3/world-up)
                         (vec3/scale! impulse-y))
@@ -30,16 +34,18 @@
     (assoc camera
            :position (vec3/scale-and-add position velocity time))))
 
+(defn- constrain-pitch [pitch]
+  (max (- (/ js/Math.PI 2))
+       (min (/ js/Math.PI 2) pitch)))
+
 (defn- update-pitch-yaw
   "Adjust yaw/pitch based on desired change"
   [camera]
-  (letfn [(clamp [x] (max (- (/ js/Math.PI 2))
-                          (min (/ js/Math.PI 2) x)))]
-    (-> camera
-        (update :yaw #(mod
-                       (+ % (:yaw-delta camera))
-                       (* 2 js/Math.PI)))
-        (update :pitch #(clamp (+ % (:pitch-delta camera)))))))
+  (-> camera
+      (update :yaw #(mod
+                     (+ % (:yaw-delta camera))
+                     (* 2 js/Math.PI)))
+      (update :pitch #(constrain-pitch (+ % (:pitch-delta camera))))))
 
 (defn- update-orientation [camera]
   (-> camera
@@ -55,19 +61,25 @@
       (update-orientation)
       (move-camera time)))
 
-(defn- update-orbit-movement [camera]
-  (let [yaw-delta (:yaw-delta camera)]
+(defn- update-orbit-movement [camera time]
+  (let [yaw-delta (:yaw-delta camera)
+        pitch-delta (-
+                     (constrain-pitch (+ (:pitch camera) (:pitch-delta camera)))
+                     (:pitch camera))
+        right (get-right-vector camera)]
     (-> camera
         (update :position
                 #(-> (mat4/create-identity)
+                     (as-> m (apply mat4/rotate! m pitch-delta right))
                      (mat4/rotate-y! yaw-delta)
                      (mat4/mult-vec3 %)))
         (assoc :yaw-delta (- yaw-delta))
-        (update-orientation))))
+        ; OK for now, but need to refine camera motion while in orbit mode
+        (update-fly-movement time))))
 
 (defn update-camera [camera time]
   (let [camera (if (:orbit? camera)
-                 (update-orbit-movement camera)
+                 (update-orbit-movement camera time)
                  (update-fly-movement camera time))
         [x y z] (:position camera)
         ; Inverse of pure rotation matrix is its transpose

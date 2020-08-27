@@ -7,7 +7,7 @@
      :pitch-delta (* dy sensitivity)}))
 
 (def FORCE 2)
-(def COUNTER-FORCE 3)
+(def COUNTER-FORCE 4)
 
 (defn- get-input-axis-value [current user-impulse time]
   (let [; Pick a direction to apply an input force.
