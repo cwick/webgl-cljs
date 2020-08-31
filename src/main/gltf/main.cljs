@@ -8,7 +8,8 @@
                         [gltf.ui :as ui]
                         [gltf.camera :as camera]
                         [gltf.math.vec3 :as vec3]
-                        [gltf.math.mat4 :as mat4]))
+                        [gltf.math.mat4 :as mat4]
+                        [gltf.scene :as scene]))
 
 (defonce app-state (r/atom {}))
 
@@ -20,7 +21,7 @@
          :last-frame-time nil}))
 
 ; TODO put this somewhere else
-(defn- create-default-scene []
+(defn- create-floor-node []
   (let [texture-scale 50
         vertex-data
         (js/Float32Array.from
@@ -74,27 +75,28 @@
                              255 255 255 255])}}
         material
         {:pbrMetallicRoughness {:baseColorTexture texture :baseColorFactor [0.75 0.7 0.7 1.0]}}]
-    {:nodes
-     [{:name "Floor"
-       :matrix (-> (mat4/create-identity)
-                   (mat4/translate! 0 0 0)
-                   (mat4/scale! texture-scale texture-scale texture-scale))
-       :mesh {:name "Floor"
-              :primitives
-              [{:attributes
-                {:POSITION position-attribute
-                 :TEXCOORD_0 texcoord-attribute}
-                :mode :TRIANGLES
-                :material material}]}}]}))
+    (scene/create-node
+     {:name "Floor"
+      :matrix (-> (mat4/create-identity)
+                  (mat4/translate! 0 0 0)
+                  (mat4/scale! texture-scale texture-scale texture-scale))
+      :mesh {:name "Floor"
+             :primitives
+             [{:attributes
+               {:POSITION position-attribute
+                :TEXCOORD_0 texcoord-attribute}
+               :mode :TRIANGLES
+               :material material}]}})))
 
-(def default-scene (create-default-scene))
+(def default-scene (-> (scene/create)
+                       (scene/add-child (create-floor-node))))
 
 (defn- load-model [gltf base-url]
+  (swap! app-state assoc :gltf gltf)
   (-> (gltf.loader/load-gltf gltf base-url)
       (.then (fn [scene]
                (swap! app-state assoc
-                      :gltf gltf
-                      :scene (update default-scene :nodes conj {:children (:nodes scene)}))))))
+                      :scene (scene/merge-scene default-scene scene))))))
 
 (defn ^:dev/after-load start []
   (gl/recompile-shaders)
@@ -109,10 +111,10 @@
     (:gltf @state)
     (:scene @state)]])
 
-(defn- draw-model []
-  (when-let [model (:scene @app-state)]
+(defn- draw-scene []
+  (when-let [scene (:scene @app-state)]
     (gl/set-view-matrix! (get-in @game-state [:camera :view-matrix]))
-    (gl/draw model)))
+    (gl/draw scene)))
 
 (defn- handle-mouse-button-input [buttons]
   (swap! game-state assoc-in [:input :mouse :pressed-buttons] buttons))
@@ -150,7 +152,7 @@
       (ui/draw-benchmark
        "Update time"
        #(swap! game-state update-game-state time-delta))
-      (draw-model))
+      (draw-scene))
     (swap! game-state assoc :last-frame-time time-seconds)
     (js/requestAnimationFrame main-loop)))
 

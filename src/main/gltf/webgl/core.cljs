@@ -1,6 +1,7 @@
 (ns gltf.webgl.core (:require
                      [gltf.webgl.utils :as gl-utils]
                      [gltf.ui :as ui]
+                     [gltf.scene :as scene]
                      [gltf.math.mat4 :as mat4]))
 
 (defonce gl-state (atom nil))
@@ -196,17 +197,18 @@
     (draw-primitive gl p)))
 
 (defn- draw-node
-  ([gl node]
-   (draw-node gl node identity-matrix))
+  ([gl scene node]
+   (draw-node gl scene node identity-matrix))
 
-  ([gl node parent-transform]
+  ([gl scene node parent-transform]
    (let [local-transform (or (:matrix node) identity-matrix)
          global-transform (mat4/mult-mat parent-transform local-transform)]
      (swap! gl-state update-in [:stats :node-count] inc)
      (when-let [mesh (:mesh node)]
        (set-transform-matrix! gl global-transform)
        (draw-mesh gl mesh))
-     (doseq [child (:children node)] (draw-node gl child global-transform)))))
+     (doseq [child (scene/children scene node)]
+       (draw-node gl scene child global-transform)))))
 
 (defn draw [scene]
   (when-let [gl (:gl @gl-state)]
@@ -218,8 +220,7 @@
        (swap! gl-state dissoc :stats)
        (.clear gl (bit-or (.-DEPTH_BUFFER_BIT gl) (.-COLOR_BUFFER_BIT gl)))
        (bind-scene-uniforms gl)
-       (doseq [node (:nodes scene)]
-         (draw-node gl node))))
+       (draw-node gl scene (scene/root scene))))
     (print-debug-info)))
 
 (defn recompile-shaders []

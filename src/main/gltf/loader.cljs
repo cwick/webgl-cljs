@@ -1,6 +1,7 @@
 (ns gltf.loader (:require [goog.uri.utils :as uri]
                           [gltf.math.mat4 :as mat4]
                           [gltf.math.vec3 :as vec3]
+                          [gltf.scene :as scene]
                           [goog.vec.Quaternion :as quat]))
 
 (defn- load-buffer [buffer base-url]
@@ -133,10 +134,6 @@
 (defn- resolve-camera [data camera-id]
   (get-in data [:cameras camera-id]))
 
-(declare resolve-node)
-(defn- resolve-children [data children]
-  (map #(resolve-node data %) children))
-
 (defn- get-transformation-matrix [node]
   (let [{:keys [rotation translation scale]} node]
   ; TRS properties are converted to matrices and postmultiplied in 
@@ -154,9 +151,6 @@
        (contains? node :mesh)
        (assoc! :mesh (get-in data [:meshes (:mesh node)]))
 
-       (contains? node :children)
-       (assoc! :children (resolve-children data (:children node)))
-
        (contains? node :camera)
        (assoc! :camera (resolve-camera data (:camera node)))
 
@@ -168,14 +162,22 @@
      (dissoc! :translation :rotation :scale)
      (persistent!))))
 
-(defn- resolve-nodes [data node-ids]
-  (map
-   #(resolve-node data %)
-   node-ids))
+(defn- add-scene-node [scene gltf-data gltf-node parent-id]
+  (let [new-node (if parent-id (scene/create-node gltf-node) (scene/root scene))]
+    (reduce (fn [new-scene gltf-node-id]
+              (add-scene-node new-scene
+                              gltf-data
+                              (resolve-node gltf-data gltf-node-id)
+                              (:id new-node)))
+            (if parent-id
+              (scene/add-child scene new-node parent-id)
+              scene)
+            (:children gltf-node))))
 
 (defn resolve-scene [data scene-id]
-  (let [scene (get-in data [:scenes scene-id])]
-    (update scene :nodes #(resolve-nodes data %))))
+  (let [gltf-scene (get-in data [:scenes scene-id])
+        scene (scene/create)]
+    (add-scene-node scene data {:children (:nodes gltf-scene)} nil)))
 
 (defn load-gltf [data base-url]
   (-> (load-assets data base-url)
