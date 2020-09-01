@@ -9,6 +9,7 @@
                         [gltf.camera :as camera]
                         [gltf.math.vec3 :as vec3]
                         [gltf.math.mat4 :as mat4]
+                        [gltf.math.quat :as quat]
                         [gltf.scene :as scene]))
 
 (defonce app-state (r/atom {}))
@@ -77,9 +78,9 @@
         {:pbrMetallicRoughness {:baseColorTexture texture :baseColorFactor [0.75 0.7 0.7 1.0]}}]
     (scene/create-node
      {:name "Floor"
-      :matrix (-> (mat4/create-identity)
-                  (mat4/translate! 0 0 0)
-                  (mat4/scale! texture-scale texture-scale texture-scale))
+      :translation (vec3/zero)
+      :rotation (quat/create-identity)
+      :scale (vec3/create texture-scale texture-scale texture-scale)
       :mesh {:name "Floor"
              :primitives
              [{:attributes

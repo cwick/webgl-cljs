@@ -2,11 +2,16 @@
                      [gltf.webgl.utils :as gl-utils]
                      [gltf.ui :as ui]
                      [gltf.scene :as scene]
-                     [gltf.math.mat4 :as mat4]))
+                     [gltf.math.mat4 :as mat4]
+                     [gltf.math.vec3 :as vec3]
+                     [gltf.math.quat :as quat]))
 
 (defonce gl-state (atom nil))
 
 (def identity-matrix (mat4/create-identity))
+(def no-translation (vec3/create))
+(def no-rotation (quat/create-identity))
+(def no-scale (vec3/create 1 1 1))
 
 (defn- init-gl-state [gl]
   (reset! gl-state {:gl gl}))
@@ -201,7 +206,11 @@
    (draw-node gl scene node identity-matrix))
 
   ([gl scene node parent-transform]
-   (let [local-transform (or (:matrix node) identity-matrix)
+   ; TODO: don't deal with transforms in this file?
+   (let [local-transform (mat4/create-rotation-translation-scale
+                          (or (:rotation node) no-rotation)
+                          (or (:translation node) no-translation)
+                          (or (:scale node) no-scale))
          global-transform (mat4/mult-mat parent-transform local-transform)]
      (swap! gl-state update-in [:stats :node-count] inc)
      (when-let [mesh (:mesh node)]
@@ -215,6 +224,7 @@
     (ui/draw-benchmark
      "Draw time"
      (fn []
+       ; TODO stop doing this
        (when-not (identical? scene (:scene @gl-state))
          (swap! gl-state setup-new-scene gl scene))
        (swap! gl-state dissoc :stats)

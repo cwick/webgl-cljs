@@ -1,8 +1,8 @@
 (ns gltf.loader (:require [goog.uri.utils :as uri]
                           [gltf.math.mat4 :as mat4]
                           [gltf.math.vec3 :as vec3]
-                          [gltf.scene :as scene]
-                          [goog.vec.Quaternion :as quat]))
+                          [gltf.math.quat :as quat]
+                          [gltf.scene :as scene]))
 
 (defn- load-buffer [buffer base-url]
   (-> (js/fetch (uri/appendPath base-url (:uri buffer)))
@@ -134,16 +134,6 @@
 (defn- resolve-camera [data camera-id]
   (get-in data [:cameras camera-id]))
 
-(defn- get-transformation-matrix [node]
-  (let [{:keys [rotation translation scale]} node]
-  ; TRS properties are converted to matrices and postmultiplied in 
-  ; the T * R * S order to compose the transformation matrix; 
-  ; first the scale is applied to the vertices, then the rotation, and then the translation.
-    (mat4/create-rotation-translation-scale
-     (or (clj->js rotation) (quat/createIdentityFloat32))
-     (if translation (apply vec3/create translation) (vec3/create))
-     (if scale (apply vec3/create scale) (vec3/create 1 1 1)))))
-
 (defn- resolve-node [data node-id]
   (let [node (transient (get-in data [:nodes node-id]))]
     (->
@@ -154,13 +144,28 @@
        (contains? node :camera)
        (assoc! :camera (resolve-camera data (:camera node)))
 
-       (:matrix node)
-       (assoc! :matrix (apply mat4/create (:matrix node)))
+       (contains? node :translation)
+       (assoc! :translation (apply vec3/create (:translation node)))
 
-       (some #(% node) [:translation :rotation :scale])
-       (assoc! :matrix (get-transformation-matrix node)))
-     (dissoc! :translation :rotation :scale)
+       (contains? node :rotation)
+       (assoc! :rotation (apply quat/create (:rotation node)))
+
+       (contains? node :scale)
+       (assoc! :scale (apply vec3/create (:scale node))))
+     (assoc! :matrix (if-let [m (:matrix node)] (apply mat4/create m) (mat4/create-identity)))
+     (as-> node (let [matrix (:matrix node)]
+                  (cond-> node
+                    (not (:translation node))
+                    (assoc! :translation (mat4/get-translation matrix))
+
+                    (not (:rotation node))
+                    (assoc! :rotation (mat4/get-rotation matrix))
+
+                    (not (:scale node))
+                    (assoc! :scale (mat4/get-scale matrix)))))
+     (dissoc! :matrix)
      (persistent!))))
+
 
 (defn- add-scene-node [scene gltf-data gltf-node parent-id]
   (let [new-node (if parent-id (scene/create-node gltf-node) (scene/root scene))]
