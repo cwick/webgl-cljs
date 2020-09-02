@@ -1,84 +1,92 @@
-(ns gltf.input)
+(ns gltf.input (:require
+                [gltf.math.utils :as math]))
 
-(defonce input-state (atom {:initialized false
-                            :buttons #{}
-                            :mouse-buttons #{}}))
+(defn create-axis [name]
+  {:name name :value 0 :previous-value 0})
 
-(defn- get-callback-for-event [e kind]
-  (get-in @input-state [:callbacks (.-target e) kind]))
+(defn create-controller [axes]
+  (into {} (map (fn [a] [(keyword (:name a)) a]) axes)))
 
-(defn- on-mouse-move-impl [e]
-  (when-let [callback (get-callback-for-event e :on-mouse-move)]
-    (callback (.-movementX e) (.-movementY e))))
+(defn map-axis
+  ([name map-fn selector]
+   (map-axis name map-fn nil selector))
 
-(defn- on-mouse-down-impl [e]
-  (let [buttons (:mouse-buttons @input-state)
-        button (.-button e)
-        new-buttons (conj buttons button)]
-    (swap! input-state assoc :mouse-buttons new-buttons)
-    (when-let [callback (get-callback-for-event e :on-mouse-down)]
-      (callback new-buttons button))))
+  ([name map-fn negative-selector positive-selector]
+   {:name name
+    :value 0
+    :previous-value 0
+    :positive-selector positive-selector
+    :negative-selector negative-selector
+    :map-fn map-fn}))
 
-(defn- on-mouse-up-impl [e]
-  (let [buttons (:mouse-buttons @input-state)
-        button (.-button e)
-        new-buttons (disj buttons button)]
-    (swap! input-state assoc :mouse-buttons new-buttons)
-    (when-let [callback (get-callback-for-event e :on-mouse-up)]
-      (callback new-buttons button))))
+(defn- get-raw-input-value [input-state selector]
+  (if selector
+    (let [raw-value (get-in input-state selector)]
+      (if (= (second selector) :buttons)
+        (if raw-value 1 0)
+        raw-value))
+    0))
 
-(defn- on-key-down-impl [e]
-  (let [buttons (:buttons @input-state)
-        code (.-code e)
-        new-buttons (conj buttons code)]
-    (swap! input-state assoc :buttons new-buttons)
-    ; Key down will get fired repeatedly by the browser for the same key (auto key repeat)
-    ; Detect when that's happening and don't call the user back.
-    (when-let [callback (and (not (contains? buttons code))
-                             (get-callback-for-event e :on-key-down))]
-      (callback new-buttons code))))
+(defn update-axis [axis input-state time-delta]
+  (let [positive-value (get-raw-input-value input-state (:positive-selector axis))
+        negative-value (get-raw-input-value input-state (:negative-selector axis))
+        raw-value (- positive-value negative-value)]
+    (assoc axis
+           :value ((:map-fn axis) raw-value (:previous-value axis) time-delta)
+           :previous-value (:value axis))))
 
-(defn- on-key-up-impl [e]
-  (let [buttons (:buttons @input-state)
-        code (.-code e)
-        new-buttons (disj buttons code)]
-    (swap! input-state assoc :buttons new-buttons)
-    (when-let [callback (get-callback-for-event e :on-key-up)]
-      (callback new-buttons code))))
+(defn update-controller [controller input-state time-delta]
+  (persistent!
+   (loop [new-controller (transient controller)
+          axes controller]
+     (if-let [[key axis] (first axes)]
+       (recur (assoc! new-controller key (update-axis axis input-state time-delta))
+              (rest axes))
+       new-controller))))
 
-(defn- on-pointer-lock-change [canvas]
-  (fn []
-    (if (== js/document.pointerLockElement canvas)
-      (do
-        (.addEventListener canvas "mousemove" on-mouse-move-impl)
-        (.addEventListener canvas "mousedown" on-mouse-down-impl)
-        (.addEventListener canvas "mouseup" on-mouse-up-impl))
-      (do
-        (.removeEventListener canvas "mousemove" on-mouse-move-impl)
-        (.removeEventListener canvas "mousedown" on-mouse-down-impl)
-        (.removeEventListener canvas "mouseup" on-mouse-up-impl)))))
+(defn button-axis [raw-value]
+  (math/round (math/clamp raw-value 0 1)))
 
-(defn- on-canvas-click [e] (.requestPointerLock (.-target e)))
+(defn absolute-axis [raw-value]
+  (math/clamp raw-value -1 1))
 
-(defn init [canvas]
-  (when-not (:initialized @input-state)
-    (.addEventListener js/document "pointerlockchange" (on-pointer-lock-change canvas))
-    (.addEventListener canvas "click" on-canvas-click)
-    (.addEventListener canvas "keydown" on-key-down-impl)
-    (.addEventListener canvas "keyup" on-key-up-impl)
-    (swap! input-state assoc :initialized true)))
+(def raw-axis identity)
 
-(defn on-mouse-move [canvas callback]
-  (swap! input-state assoc-in [:callbacks canvas :on-mouse-move] callback))
+(defn sensitivity [value]
+  (fn [raw-value] (* raw-value value)))
 
-(defn on-mouse-down [canvas callback]
-  (swap! input-state assoc-in [:callbacks canvas :on-mouse-down] callback))
+(defn digital-to-absolute-axis [force counter-force]
+  (fn [raw-value previous-value time-delta]
+    (let [; Pick a direction to apply an input force.
+         ; If there's no user input on this axis we'll apply a force in the opposite
+         ; direction to start returning the input position to neutral
+          impulse
+          (if (zero? raw-value)
+            (- (js/Math.sign previous-value))
+            raw-value)
 
-(defn on-mouse-up [canvas callback]
-  (swap! input-state assoc-in [:callbacks canvas :on-mouse-up] callback))
+        ; Pick between a counter-force and normal force
+        ; Normal: Current position is zero, or in the same direction the user is already applying force
+        ; Counter: User is applying force in the opposite direction from current input, or 
+        ;   has let go of the controls on this axis.
+        ; Having two different values here allows for better fine tuning. Having the counter force
+        ;   higher than the normal force feels more responsive.
+          acceleration
+          (if (or (zero? raw-value)
+                  (and
+                   (not (zero? previous-value))
+                   (not= (js/Math.sign raw-value) (js/Math.sign previous-value))))
+            counter-force
+            force)
 
-(defn on-key-down [canvas callback]
-  (swap! input-state assoc-in [:callbacks canvas :on-key-down] callback))
+          new-value
+          (+ previous-value (* acceleration impulse time-delta))
 
-(defn on-key-up [canvas callback]
-  (swap! input-state assoc-in [:callbacks canvas :on-key-up] callback))
+        ; We need to detect if the force we're applying would cause the input value to flip
+        ; to the other side of the axis. If that happens, we return the input to neutral
+        ; so it doesn't go flying off in the other direction.
+          new-value
+          (if (and (zero? raw-value) (not= (js/Math.sign new-value) (js/Math.sign previous-value)))
+            0
+            new-value)]
+      (math/clamp new-value -1 1))))

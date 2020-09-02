@@ -2,8 +2,7 @@
                         [reagent.dom :as rdom]
                         [datafrisk.core :as datafrisk]
                         [gltf.loader]
-                        [gltf.controllers :as controllers]
-                        [gltf.input :as input]
+                        [gltf.input-devices :as input-devices]
                         [gltf.webgl.core :as gl]
                         [gltf.ui :as ui]
                         [gltf.camera :as camera]
@@ -11,14 +10,10 @@
                         [gltf.math.mat4 :as mat4]
                         [gltf.math.quat :as quat]
                         [gltf.scene :as scene]))
-
 (defonce app-state (r/atom {}))
 
 (defonce game-state
   (atom {:camera (camera/create)
-         :input {:keyboard {:pressed-buttons #{}
-                            :impulse (vec3/zero)}
-                 :mouse {:pressed-buttons #{}}}
          :last-frame-time nil}))
 
 ; TODO put this somewhere else
@@ -117,32 +112,8 @@
     (gl/set-view-matrix! (get-in @game-state [:camera :view-matrix]))
     (gl/draw scene)))
 
-(defn- handle-mouse-button-input [buttons]
-  (swap! game-state assoc-in [:input :mouse :pressed-buttons] buttons))
-
-(defn- handle-mouse-input [dx dy]
-  (let [camera-motions (controllers/handle-mouse-input dx dy)]
-    (swap! game-state update :camera
-           #(-> %
-                (update :yaw-delta + (:yaw-delta camera-motions))
-                (update :pitch-delta + (:pitch-delta camera-motions))))))
-
-(defn- handle-keyboard-input
-  "Called asynchronously when keyboard input is detected"
-  [pressed-buttons]
-  (swap! game-state assoc-in [:input :keyboard :pressed-buttons] pressed-buttons))
-
-(defn- update-camera-impulse [camera game-state]
-  (assoc camera
-         :impulse (-> game-state :input :keyboard :impulse)
-         :orbit? (contains? (-> game-state :input :mouse :pressed-buttons) 2)))
-
 (defn- update-game-state [old-state time-delta]
-  (-> old-state
-      (update-in [:input :keyboard] controllers/handle-keyboard-input time-delta)
-      (as-> state
-            (update state :camera update-camera-impulse state))
-      (update :camera camera/update-camera time-delta)))
+  (update old-state :camera camera/update-camera @input-devices/input-state time-delta))
 
 (defn- main-loop [time]
   (let [time-seconds (/ time 1000)
@@ -155,6 +126,7 @@
        #(swap! game-state update-game-state time-delta))
       (draw-scene))
     (swap! game-state assoc :last-frame-time time-seconds)
+    (input-devices/end-frame)
     (js/requestAnimationFrame main-loop)))
 
 (defn- observe-canvas [canvas]
@@ -182,12 +154,7 @@
   (let [canvas (js/document.getElementById "canvas")
         ui-canvas (js/document.getElementById "ui-canvas")]
     (ui/init ui-canvas)
-    (input/init ui-canvas)
-    (input/on-mouse-move ui-canvas #'handle-mouse-input)
-    (input/on-mouse-down ui-canvas #'handle-mouse-button-input)
-    (input/on-mouse-up ui-canvas #'handle-mouse-button-input)
-    (input/on-key-down ui-canvas #'handle-keyboard-input)
-    (input/on-key-up ui-canvas #'handle-keyboard-input)
+    (input-devices/init ui-canvas)
     (gl/init-webgl canvas)
     (observe-canvas canvas))
 
