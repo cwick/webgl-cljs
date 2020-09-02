@@ -2,7 +2,12 @@
   (:require
    [gltf.math.mat4 :as mat4]
    [gltf.math.vec3 :as vec3]
-   [gltf.input :as input]))
+   [gltf.input :as input]
+   [gltf.math.utils :as math]))
+
+(defn- orbit? [camera] (-> camera :controller :orbit? :value))
+(defn- pitch-delta [camera] (-> camera :controller :pitch :value))
+(defn- yaw-delta [camera] (-> camera :controller :yaw :value))
 
 ; Extract forward and right vectors from the rotation matrix
 ; https://community.khronos.org/t/get-direction-from-transformation-matrix-or-quat/65502/2
@@ -13,9 +18,15 @@
   (-> (mat4/get-column (:orientation camera) 2)
       (vec3/negate!)))
 
+(defn- get-forward-movement-direction [camera]
+  (if (orbit? camera)
+    (-> (vec3/normalize (:position camera))
+        (vec3/scale! -1))
+    (get-forward-vector camera)))
+
 (defn- update-velocity [camera]
   (let [max-speed 12
-        forward-velocity (-> (get-forward-vector camera)
+        forward-velocity (-> (get-forward-movement-direction camera)
                              (vec3/scale! (-> camera :controller :forward :value)))
         right-velocity (-> (get-right-vector camera)
                            (vec3/scale! (-> camera :controller :right :value)))
@@ -35,20 +46,17 @@
            :position (vec3/scale-and-add position velocity time))))
 
 (defn- constrain-pitch [pitch]
-  (max (- (/ js/Math.PI 2))
-       (min (/ js/Math.PI 2) pitch)))
+  (math/clamp pitch (- (/ js/Math.PI 2)) (/ js/Math.PI 2)))
 
 (defn- update-pitch-yaw
   "Adjust yaw/pitch based on desired change"
   [camera]
-  (let [yaw-delta (-> camera :controller :yaw :value)
-        pitch-delta (-> camera :controller :pitch :value)
-        invert-yaw (if (-> camera :controller :orbit? :value) -1 1)]
+  (let [invert-yaw (if (orbit? camera) -1 1)]
     (-> camera
         (update :yaw #(mod
-                       (+ % (* yaw-delta invert-yaw))
+                       (+ % (* (yaw-delta camera) invert-yaw))
                        (* 2 js/Math.PI)))
-        (update :pitch #(constrain-pitch (+ % pitch-delta))))))
+        (update :pitch #(constrain-pitch (+ % (pitch-delta camera)))))))
 
 (defn- update-orientation [camera]
   (-> camera
@@ -65,17 +73,16 @@
       (move-camera time)))
 
 (defn- update-orbit-movement [camera time]
-  (let [yaw-delta (-> camera :controller :yaw :value)
-        pitch-delta (-> camera :controller :pitch :value)
-        pitch-delta (-
-                     (constrain-pitch (+ (:pitch camera) pitch-delta))
+  (let [pitch-delta (-
+                     (constrain-pitch (+ (:pitch camera)
+                                         (pitch-delta camera)))
                      (:pitch camera))
         right (get-right-vector camera)]
     (-> camera
         (update :position
                 #(-> (mat4/create-identity)
                      (as-> m (apply mat4/rotate! m pitch-delta right))
-                     (mat4/rotate-y! yaw-delta)
+                     (mat4/rotate-y! (yaw-delta camera))
                      (mat4/mult-vec3 %)))
         ; OK for now, but need to refine camera motion while in orbit mode
         (update-fly-movement time))))
@@ -83,7 +90,7 @@
 (defn update-camera [camera input-state time]
   (let [camera (as-> camera camera
                  (update camera :controller input/update-controller input-state time)
-                 (if (-> camera :controller :orbit? :value)
+                 (if (orbit? camera)
                    (update-orbit-movement camera time)
                    (update-fly-movement camera time)))
         [x y z] (:position camera)
@@ -94,7 +101,7 @@
 
 (defn create []
   (let [force 2
-        counter-force 4
+        counter-force 6
         axis (input/digital-to-absolute-axis force counter-force)
         mouse-sensitivity (* 0.1 (/ js/Math.PI 180))]
     {:yaw 0
