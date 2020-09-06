@@ -145,7 +145,9 @@
        (assoc! :camera (resolve-camera data (:camera node)))
 
        (contains? node :translation)
-       (assoc! :translation (apply vec3/create (:translation node)))
+       (->
+        (assoc! :position (apply vec3/create (:translation node)))
+        (dissoc! :translation))
 
        (contains? node :rotation)
        (assoc! :rotation (apply quat/create (:rotation node)))
@@ -155,8 +157,8 @@
      (assoc! :matrix (if-let [m (:matrix node)] (apply mat4/create m) (mat4/create-identity)))
      (as-> node (let [matrix (:matrix node)]
                   (cond-> node
-                    (not (:translation node))
-                    (assoc! :translation (mat4/get-translation matrix))
+                    (not (:position node))
+                    (assoc! :position (mat4/get-translation matrix))
 
                     (not (:rotation node))
                     (assoc! :rotation (mat4/get-rotation matrix))

@@ -11,25 +11,25 @@
 
 ; Extract forward and right vectors from the rotation matrix
 ; https://community.khronos.org/t/get-direction-from-transformation-matrix-or-quat/65502/2
-(defn- get-right-vector [camera]
-  (mat4/get-column (:orientation camera) 0))
+(defn- get-right-vector [orientation]
+  (mat4/get-column orientation 0))
 
-(defn- get-forward-vector [camera]
-  (-> (mat4/get-column (:orientation camera) 2)
+(defn- get-forward-vector [orientation]
+  (-> (mat4/get-column orientation 2)
       (vec3/negate!)))
 
 (defn- get-forward-movement-direction [camera]
   (if (orbit? camera)
     (-> (vec3/normalize (:position camera))
         (vec3/scale! -1))
-    (get-forward-vector camera)))
+    (:forward camera)))
 
 (defn- update-velocity [camera]
   (let [max-speed 12
         forward-velocity (-> (get-forward-movement-direction camera)
-                             (vec3/scale! (-> camera :controller :forward :value)))
-        right-velocity (-> (get-right-vector camera)
-                           (vec3/scale! (-> camera :controller :right :value)))
+                             (vec3/scale (-> camera :controller :forward :value)))
+        right-velocity (-> (:right camera)
+                           (vec3/scale (-> camera :controller :right :value)))
         up-velocity (-> (vec3/world-up)
                         (vec3/scale! (-> camera :controller :up :value)))
         velocity (-> (vec3/add forward-velocity right-velocity up-velocity)
@@ -62,10 +62,14 @@
   (-> camera
       (update-pitch-yaw)
       (as-> camera
-            (assoc camera :orientation
-                   (-> (mat4/create-identity)
-                       (mat4/rotate-y! (- (:yaw camera)))
-                       (mat4/rotate-x! (:pitch camera)))))))
+            (let [orientation (-> (mat4/create-identity)
+                                  (mat4/rotate-y! (- (:yaw camera)))
+                                  (mat4/rotate-x! (:pitch camera)))]
+
+              (assoc camera
+                     :orientation orientation
+                     :forward (get-forward-vector orientation)
+                     :right (get-right-vector orientation))))))
 
 (defn- update-fly-movement [camera time]
   (-> camera
@@ -76,12 +80,11 @@
   (let [pitch-delta (-
                      (constrain-pitch (+ (:pitch camera)
                                          (pitch-delta camera)))
-                     (:pitch camera))
-        right (get-right-vector camera)]
+                     (:pitch camera))]
     (-> camera
         (update :position
                 #(-> (mat4/create-identity)
-                     (as-> m (apply mat4/rotate! m pitch-delta right))
+                     (as-> m (apply mat4/rotate! m pitch-delta (:right camera)))
                      (mat4/rotate-y! (yaw-delta camera))
                      (mat4/mult-vec3 %)))
         ; OK for now, but need to refine camera motion while in orbit mode
@@ -103,12 +106,15 @@
   (let [force 2
         counter-force 6
         axis (input/digital-to-absolute-axis force counter-force)
-        mouse-sensitivity (* 0.1 (/ js/Math.PI 180))]
+        mouse-sensitivity (* 0.1 (/ js/Math.PI 180))
+        identity-matrix (mat4/create-identity)]
     {:yaw 0
      :pitch 0
      :position (vec3/create 0 1 3.5)
      :velocity (vec3/zero)
-     :orientation (mat4/create-identity)
+     :orientation identity-matrix
+     :right (get-right-vector identity-matrix)
+     :forward (get-forward-vector identity-matrix)
      :controller (input/create-controller
                   [(input/map-axis "right" axis
                                    [:keyboard :buttons "KeyA"] [:keyboard :buttons "KeyD"])
@@ -117,7 +123,7 @@
                                    [:keyboard :buttons "KeyS"] [:keyboard :buttons "KeyW"])
 
                    (input/map-axis "up" axis
-                                   [:keyboard :buttons "KeyQ"] [:keyboard :buttons "KeyE"])
+                                   [:keyboard :buttons "KeyC"] [:keyboard :buttons "Space"])
 
                    (input/map-axis "yaw" (input/sensitivity mouse-sensitivity)
                                    [:mouse :axes :relative-x])
@@ -125,5 +131,5 @@
                    (input/map-axis "pitch" (input/sensitivity mouse-sensitivity)
                                    [:mouse :axes :relative-y])
 
-                   (input/map-axis "orbit?" #(== 1 (input/button-axis %))
+                   (input/map-axis "orbit?" #(== 1 (apply input/button-axis %&))
                                    [:mouse :buttons 2])])}))

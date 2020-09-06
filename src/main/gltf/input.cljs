@@ -2,7 +2,7 @@
                 [gltf.math.utils :as math]))
 
 (defn create-axis [name]
-  {:name name :value 0 :previous-value 0})
+  {:name name :value 0 :previous-raw-value 0})
 
 (defn create-controller [axes]
   (into {} (map (fn [a] [(keyword (:name a)) a]) axes)))
@@ -14,7 +14,7 @@
   ([name map-fn negative-selector positive-selector]
    {:name name
     :value 0
-    :previous-value 0
+    :previous-raw-value 0
     :positive-selector positive-selector
     :negative-selector negative-selector
     :map-fn map-fn}))
@@ -32,8 +32,8 @@
         negative-value (get-raw-input-value input-state (:negative-selector axis))
         raw-value (- positive-value negative-value)]
     (assoc axis
-           :value ((:map-fn axis) raw-value (:previous-value axis) time-delta)
-           :previous-value (:value axis))))
+           :value ((:map-fn axis) axis raw-value time-delta)
+           :previous-raw-value raw-value)))
 
 (defn update-controller [controller input-state time-delta]
   (persistent!
@@ -44,20 +44,29 @@
               (rest axes))
        new-controller))))
 
-(defn button-axis [raw-value]
+(defn button-axis [_ raw-value]
   (math/round (math/clamp raw-value 0 1)))
 
-(defn absolute-axis [raw-value]
+(defn leading-edge-button-axis [axis raw-value]
+  (let [previous-raw-value (:previous-raw-value axis)]
+    (if (and (zero? previous-raw-value) (> raw-value previous-raw-value))
+      1
+      0)))
+
+(defn absolute-axis [_ raw-value]
   (math/clamp raw-value -1 1))
 
-(def raw-axis identity)
+(defn raw-axis [_ raw-value] raw-value)
 
 (defn sensitivity [value]
-  (fn [raw-value] (* raw-value value)))
+  (fn [_ raw-value] (* raw-value value)))
 
 (defn digital-to-absolute-axis [force counter-force]
-  (fn [raw-value previous-value time-delta]
-    (let [; Pick a direction to apply an input force.
+  (fn [axis raw-value time-delta]
+    (let [previous-value
+          (:value axis)
+
+         ; Pick a direction to apply an input force.
          ; If there's no user input on this axis we'll apply a force in the opposite
          ; direction to start returning the input position to neutral
           impulse

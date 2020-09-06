@@ -40,6 +40,12 @@
        (add! v2)
        (add! v3))))
 
+(defn subtract! [v1 v2]
+  (gvec3/subtract (.-data v1) (.-data v2) (.-data v1)))
+
+(defn subtract [v1 v2]
+  (subtract! (clone v1) v2))
+
 (defn negate! [v]
   (gvec3/negate (.-data v) (.-data v))
   v)
@@ -76,6 +82,9 @@
 
 (defn magnitude [v]
   (gvec3/magnitude (.-data v)))
+
+(defn distance [v1 v2]
+  (gvec3/distance (.-data v1) (.-data v2)))
 
 (defn zero? [v]
   (let [data (.-data v)]

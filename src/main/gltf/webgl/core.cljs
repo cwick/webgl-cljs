@@ -209,7 +209,7 @@
    ; TODO: don't deal with transforms in this file?
    (let [local-transform (mat4/create-rotation-translation-scale
                           (or (:rotation node) no-rotation)
-                          (or (:translation node) no-translation)
+                          (or (:position node) no-translation)
                           (or (:scale node) no-scale))
          global-transform (mat4/mult-mat parent-transform local-transform)]
      (swap! gl-state update-in [:stats :node-count] inc)

@@ -40,6 +40,7 @@
   (let [buttons (-> @input-state :keyboard :buttons)
         code (.-code e)
         new-buttons (conj buttons code)]
+    (.preventDefault e)
     (swap! input-state assoc-in [:keyboard :buttons] new-buttons)
     ; Key down will get fired repeatedly by the browser for the same key (auto key repeat)
     ; Detect when that's happening and don't call the user back.
@@ -51,6 +52,7 @@
   (let [buttons (-> @input-state :keyboard :buttons)
         code (.-code e)
         new-buttons (disj buttons code)]
+    (.preventDefault e)
     (swap! input-state assoc-in [:keyboard :buttons] new-buttons)
     (when-let [callback (get-callback-for-event e :on-key-up)]
       (callback new-buttons code))))
@@ -75,6 +77,7 @@
     (.addEventListener canvas "click" on-canvas-click)
     (.addEventListener canvas "keydown" on-key-down-impl)
     (.addEventListener canvas "keyup" on-key-up-impl)
+    (.addEventListener canvas "contextmenu" #(.preventDefault %))
     (swap! input-state assoc :initialized true)))
 
 ;; Need to put more thought into how callbacks are triggered (would likely need to fire at beginning of frame)

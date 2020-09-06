@@ -6,14 +6,20 @@
                         [gltf.webgl.core :as gl]
                         [gltf.ui :as ui]
                         [gltf.camera :as camera]
+                        [gltf.input :as input]
                         [gltf.math.vec3 :as vec3]
                         [gltf.math.mat4 :as mat4]
                         [gltf.math.quat :as quat]
                         [gltf.scene :as scene]))
+
 (defonce app-state (r/atom {}))
 
 (defonce game-state
   (atom {:camera (camera/create)
+         :grab-tool {:grabbing? false
+                     :controller (input/create-controller
+                                  [(input/map-axis "grabbing?" input/leading-edge-button-axis
+                                                   [:keyboard :buttons "KeyG"])])}
          :last-frame-time nil}))
 
 ; TODO put this somewhere else
@@ -73,7 +79,7 @@
         {:pbrMetallicRoughness {:baseColorTexture texture :baseColorFactor [0.75 0.7 0.7 1.0]}}]
     (scene/create-node
      {:name "Floor"
-      :translation (vec3/zero)
+      :position (vec3/zero)
       :rotation (quat/create-identity)
       :scale (vec3/create texture-scale texture-scale texture-scale)
       :mesh {:name "Floor"
@@ -91,7 +97,7 @@
   (swap! app-state assoc :gltf gltf)
   (-> (gltf.loader/load-gltf gltf base-url)
       (.then (fn [scene]
-               (swap! app-state assoc
+               (swap! game-state assoc
                       :scene (scene/merge-scene default-scene scene))))))
 
 (defn ^:dev/after-load start []
@@ -104,16 +110,39 @@
   [:<>
    [ui/SelectModel {:on-select load-model}]
    [datafrisk/DataFriskShell
-    (:gltf @state)
-    (:scene @state)]])
+    (:gltf @state)]])
 
 (defn- draw-scene []
-  (when-let [scene (:scene @app-state)]
-    (gl/set-view-matrix! (get-in @game-state [:camera :view-matrix]))
-    (gl/draw scene)))
+  (gl/set-view-matrix! (get-in @game-state [:camera :view-matrix]))
+  (gl/draw (:scene @game-state)))
+
+(defn- update-grab-tool [old-grab scene camera time-delta]
+  (let [node (second (scene/children scene (scene/root scene)))]
+    (-> old-grab
+        (update :controller input/update-controller @input-devices/input-state time-delta)
+        (cond->
+         (== 1 (-> old-grab :controller :grabbing? :value))
+          (assoc :grabbing? (not (:grabbing? old-grab))
+                 :distance (vec3/distance (:position node) (:position camera)))))))
+
+(defn- update-scene [old-scene game-state]
+  (let [grab-tool (:grab-tool game-state)]
+    (if-let [node (and (:grabbing? grab-tool)
+                       (second (scene/children old-scene (scene/root old-scene))))]
+      (do
+        (ui/debug (:distance grab-tool))
+        (scene/update-node old-scene (:id node) assoc :position
+                           (-> (vec3/scale (-> game-state :camera :forward) (:distance grab-tool))
+                               (vec3/add! (-> game-state :camera :position)))))
+      old-scene)))
 
 (defn- update-game-state [old-state time-delta]
-  (update old-state :camera camera/update-camera @input-devices/input-state time-delta))
+  (-> old-state
+      (update :camera camera/update-camera @input-devices/input-state time-delta)
+      (as->
+       state
+       (update state :grab-tool update-grab-tool (:scene old-state) (:camera state) time-delta)
+        (update state :scene update-scene state))))
 
 (defn- main-loop [time]
   (let [time-seconds (/ time 1000)
@@ -150,7 +179,7 @@
    [App app-state]
    (js/document.getElementById "app"))
 
-  (swap! app-state assoc :scene default-scene)
+  (swap! game-state assoc :scene default-scene)
   (let [canvas (js/document.getElementById "canvas")
         ui-canvas (js/document.getElementById "ui-canvas")]
     (ui/init ui-canvas)
