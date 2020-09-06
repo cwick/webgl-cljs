@@ -117,21 +117,25 @@
   (gl/draw (:scene @game-state)))
 
 (defn- update-grab-tool [old-grab scene camera time-delta]
-  (let [node (second (scene/children scene (scene/root scene)))]
-    (-> old-grab
-        (update :controller input/update-controller @input-devices/input-state time-delta)
-        (cond->
-         (== 1 (-> old-grab :controller :grabbing? :value))
-          (assoc :grabbing? (not (:grabbing? old-grab))
-                 :distance (vec3/distance (:position node) (:position camera)))))))
+  (let [node (second (scene/children scene (scene/root scene)))
+        grab (-> old-grab
+                 (update :controller input/update-controller @input-devices/input-state time-delta))
+        grab-triggered? (== 1 (-> grab :controller :grabbing? :value))]
+    (if (and grab-triggered? node)
+      (if (not (:grabbing? old-grab))
+        (assoc grab
+               :grabbing? true
+               :grab-point (mat4/mult-vec3 (:view-matrix camera) (:position node))
+               :grab-node-id (:id node))
+        (assoc grab :grabbing? false))
+      grab)))
 
 (defn- update-scene [old-scene game-state]
   (let [grab-tool (:grab-tool game-state)]
-    (if-let [node (and (:grabbing? grab-tool)
-                       (second (scene/children old-scene (scene/root old-scene))))]
-      (scene/update-node old-scene (:id node) assoc :position
-                         (-> (vec3/scale (-> game-state :camera :forward) (:distance grab-tool))
-                             (vec3/add! (-> game-state :camera :position))))
+    (if-let [node-id (and (:grabbing? grab-tool)
+                          (:grab-node-id grab-tool))]
+      (scene/update-node old-scene node-id assoc :position
+                         (mat4/mult-vec3 (:world-matrix (-> game-state :camera)) (:grab-point grab-tool)))
       old-scene)))
 
 (defn- update-game-state [old-state time-delta]

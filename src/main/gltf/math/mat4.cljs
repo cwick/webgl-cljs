@@ -26,7 +26,10 @@
                         (aget data 13) " "
                         (aget data 14) " "
                         (aget data 15) " "
-                        (aget data 16) "]"))))
+                        (aget data 16) "]")))
+
+  ICloneable
+  (-clone [_] (Mat4. (gmat4/setFromMat4f (gmat4/create) data))))
 
 (defn create
   ([v00 v10 v20 v30
@@ -87,8 +90,11 @@
 (defn transpose [m]
   (Mat4. (gmat4/transpose (.-data m) (gmat4/create))))
 
+(defn mult-mat! [m1 m2]
+  (Mat4. (gmat4/multMat (.-data m1) (.-data m2) (.-data m1))))
+
 (defn mult-mat [m1 m2]
-  (Mat4. (gmat4/multMat (.-data m1) (.-data m2) (gmat4/create))))
+  (mult-mat! (clone m1) m2))
 
 (defn mult-vec3 [m v]
   (vec3/Vec3. (gmat4/multVec3 (.-data m) (.-data v) (gvec3/create))))

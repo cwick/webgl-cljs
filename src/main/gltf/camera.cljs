@@ -65,7 +65,6 @@
             (let [orientation (-> (mat4/create-identity)
                                   (mat4/rotate-y! (- (:yaw camera)))
                                   (mat4/rotate-x! (:pitch camera)))]
-
               (assoc camera
                      :orientation orientation
                      :forward (get-forward-vector orientation)
@@ -99,8 +98,13 @@
         [x y z] (:position camera)
         ; Inverse of pure rotation matrix is its transpose
         view-matrix (-> (mat4/transpose (:orientation camera))
-                        (mat4/translate! (- x) (- y) (- z)))]
-    (assoc camera :view-matrix view-matrix)))
+                        (mat4/translate! (- x) (- y) (- z)))
+        world-matrix (mat4/mult-mat!
+                      (mat4/make-translate x y z)
+                      (:orientation camera))]
+    (assoc camera
+           :view-matrix view-matrix
+           :world-matrix world-matrix)))
 
 (defn create []
   (let [force 2
