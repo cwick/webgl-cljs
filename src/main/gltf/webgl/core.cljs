@@ -68,6 +68,7 @@
       (swap! gl-state assoc-in [:buffers buffer-view] gl-buffer)
       gl-buffer)))
 
+; TODO free individual resources, not the whole scene
 (defn- setup-new-scene
   "Free all GL resources and set new scene"
   [old-state gl scene]
@@ -224,9 +225,9 @@
     (ui/draw-benchmark
      "Draw time"
      (fn []
-       ; TODO stop doing this
-       (when-not (identical? scene (:scene @gl-state))
-         (swap! gl-state setup-new-scene gl scene))
+       ; TODO free GL resources when scene nodes destroyed
+       #_(when-not (identical? scene (:scene @gl-state))
+           (swap! gl-state setup-new-scene gl scene))
        (swap! gl-state dissoc :stats)
        (.clear gl (bit-or (.-DEPTH_BUFFER_BIT gl) (.-COLOR_BUFFER_BIT gl)))
        (bind-scene-uniforms gl)

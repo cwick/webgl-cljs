@@ -129,11 +129,9 @@
   (let [grab-tool (:grab-tool game-state)]
     (if-let [node (and (:grabbing? grab-tool)
                        (second (scene/children old-scene (scene/root old-scene))))]
-      (do
-        (ui/debug (:distance grab-tool))
-        (scene/update-node old-scene (:id node) assoc :position
-                           (-> (vec3/scale (-> game-state :camera :forward) (:distance grab-tool))
-                               (vec3/add! (-> game-state :camera :position)))))
+      (scene/update-node old-scene (:id node) assoc :position
+                         (-> (vec3/scale (-> game-state :camera :forward) (:distance grab-tool))
+                             (vec3/add! (-> game-state :camera :position))))
       old-scene)))
 
 (defn- update-game-state [old-state time-delta]
