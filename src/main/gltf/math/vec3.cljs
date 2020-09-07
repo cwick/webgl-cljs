@@ -106,3 +106,15 @@
 
 (defn clamp [v max-length]
   (clamp! (clone v) max-length))
+
+(defn mult-vec3! [v1 v2]
+  (let [d1 (.-data v1)
+        d2 (.-data v2)]
+    (gvec3/setFromValues d1
+                         (* (aget d1 0) (aget d2 0))
+                         (* (aget d1 1) (aget d2 1))
+                         (* (aget d1 2) (aget d2 2)))
+    v1))
+
+(defn mult-vec3 [v1 v2]
+  (mult-vec3! (clone v1) v2))

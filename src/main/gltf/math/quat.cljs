@@ -1,5 +1,6 @@
-(ns gltf.math.quat (:require
-                    [goog.vec.Quaternion :as gquat]))
+(ns gltf.math.quat
+  (:refer-clojure :exclude [concat])
+  (:require [goog.vec.Quaternion :as gquat]))
 
 (deftype Quat [data]
   Object
@@ -34,3 +35,17 @@
 
 (defn create-identity []
   (Quat. (gquat/createIdentityFloat32)))
+
+(defn concat! [q1 q2]
+  (gquat/concat (.-data q1) (.-data q2) (.-data q1))
+  q1)
+
+(defn concat [q1 q2]
+  (concat! (clone q1) q2))
+
+(defn normalize! [q]
+  (gquat/normalize (.-data q) (.-data q))
+  q)
+
+(defn normalize [q]
+  (normalize! (clone q)))

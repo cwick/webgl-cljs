@@ -67,14 +67,35 @@
   (let [global-transform
         (mat4/mult-mat parent-transform (get-local-transform node))
 
-        updated-nodes (assoc! nodes (:id node) (assoc node :global-transform global-transform))]
+        global-position
+        (mat4/get-translation global-transform)
+
+        global-scale
+        (mat4/get-scale global-transform)
+
+        global-rotation
+        (mat4/get-rotation global-transform)
+
+        updated-nodes
+        (assoc! nodes (:id node)
+                (-> (transient node)
+                    (assoc! :global-transform global-transform
+                            :global-position global-position
+                            :global-scale global-scale
+                            :global-rotation global-rotation)
+                    (persistent!)))]
     (reduce
-     #(update-node-transforms scene %1 global-transform %2)
+     #(update-node-transforms
+       scene %1 global-transform %2)
      updated-nodes
      (children scene node))))
 
 (defn update-transforms [scene]
   (let [nodes
-        (update-node-transforms scene (transient (:nodes scene)) (mat4/create-identity) (root scene))]
+        (update-node-transforms
+         scene
+         (transient (:nodes scene))
+         (mat4/create-identity)
+         (root scene))]
     (assoc scene :nodes (persistent! nodes))))
 
