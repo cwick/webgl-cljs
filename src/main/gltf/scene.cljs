@@ -11,9 +11,13 @@
   ([] (create-node nil))
 
   ([data]
-   (merge data
-          {:id (swap! auto-id inc)
-           :children []})))
+   (merge
+    {:position (vec3/create)
+     :rotation (quat/create-identity)
+     :scale (vec3/create 1 1 1)}
+    data
+    {:id (swap! auto-id inc)
+     :children []})))
 
 (defn create []
   (let [node (create-node)]
@@ -41,40 +45,40 @@
   (map #(get-node scene %) (:children node)))
 
 (defn merge-scene [scene other]
-  (let [root-node? (fn [[node-id _]] (contains? #{(:root scene) (:root other)} node-id))]
-    (-> (create)
+  (let [new-scene (create)
+        new-root-id (:id (root new-scene))]
+    (-> new-scene
         (update :nodes #(merge % (:nodes scene) (:nodes other)))
-        (update :nodes #(into {} (remove root-node? %)))
-        (as-> new-scene
-              (update-in
-               new-scene
-               [:nodes (:root new-scene) :children]
-               #(vec (concat %
-                             (:children (root scene))
-                             (:children (root other)))))))))
+        (add-child (root scene) new-root-id)
+        (add-child (root other) new-root-id))))
 
 (def no-translation (vec3/create))
 (def no-rotation (quat/create-identity))
 (def no-scale (vec3/create 1 1 1))
 
-(defn- get-local-transform [node]
-  (mat4/create-rotation-translation-scale
-   (or (:rotation node) no-rotation)
-   (or (:position node) no-translation)
-   (or (:scale node) no-scale)))
+; Note: Calling delay directly in the node update function
+; causes massive memory leaks, somehow related to
+; creating anonymous functions in JS and stuff being retained in
+; the closure.
+(defn- lazy-translation [t] (delay (mat4/get-translation t)))
+(defn- lazy-scale [t] (delay (mat4/get-scale t)))
+(defn- lazy-rotation [t] (delay (mat4/get-rotation t)))
 
 (defn- update-node-transforms [scene nodes parent-transform node]
   (let [global-transform
-        (mat4/mult-mat parent-transform (get-local-transform node))
+        (mat4/mult-mat parent-transform (mat4/create-rotation-translation-scale
+                                         (:rotation node)
+                                         (:position node)
+                                         (:scale node)))
 
         global-position
-        (mat4/get-translation global-transform)
+        (lazy-translation global-transform)
 
         global-scale
-        (mat4/get-scale global-transform)
+        (lazy-scale global-transform)
 
         global-rotation
-        (mat4/get-rotation global-transform)
+        (lazy-rotation global-transform)
 
         updated-nodes
         (assoc! nodes (:id node)
