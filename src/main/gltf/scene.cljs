@@ -1,8 +1,10 @@
-(ns gltf.scene)
+(ns gltf.scene (:require [gltf.math.vec3 :as vec3]
+                         [gltf.math.mat4 :as mat4]
+                         [gltf.math.quat :as quat]))
 
 (defonce auto-id (atom 0))
 
-(defn assoc-node [scene node]
+(defn- assoc-node [scene node]
   (assoc-in scene [:nodes (:id node)] node))
 
 (defn create-node
@@ -50,3 +52,29 @@
                #(vec (concat %
                              (:children (root scene))
                              (:children (root other)))))))))
+
+(def no-translation (vec3/create))
+(def no-rotation (quat/create-identity))
+(def no-scale (vec3/create 1 1 1))
+
+(defn- get-local-transform [node]
+  (mat4/create-rotation-translation-scale
+   (or (:rotation node) no-rotation)
+   (or (:position node) no-translation)
+   (or (:scale node) no-scale)))
+
+(defn- update-node-transforms [scene nodes parent-transform node]
+  (let [global-transform
+        (mat4/mult-mat parent-transform (get-local-transform node))
+
+        updated-nodes (assoc! nodes (:id node) (assoc node :global-transform global-transform))]
+    (reduce
+     #(update-node-transforms scene %1 global-transform %2)
+     updated-nodes
+     (children scene node))))
+
+(defn update-transforms [scene]
+  (let [nodes
+        (update-node-transforms scene (transient (:nodes scene)) (mat4/create-identity) (root scene))]
+    (assoc scene :nodes (persistent! nodes))))
+

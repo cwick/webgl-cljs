@@ -116,6 +116,7 @@
   (gl/set-view-matrix! (get-in @game-state [:camera :view-matrix]))
   (gl/draw (:scene @game-state)))
 
+; TODO need to convert from local to global and back again when grabbing
 (defn- update-grab-tool [old-grab scene camera time-delta]
   (let [node (second (scene/children scene (scene/root scene)))
         grab (-> old-grab
@@ -141,9 +142,10 @@
 (defn- update-game-state [old-state time-delta]
   (-> old-state
       (update :camera camera/update-camera @input-devices/input-state time-delta)
+      (update :scene scene/update-transforms)
       (as->
        state
-       (update state :grab-tool update-grab-tool (:scene old-state) (:camera state) time-delta)
+       (update state :grab-tool update-grab-tool (:scene state) (:camera state) time-delta)
         (update state :scene update-scene state))))
 
 (defn- main-loop [time]
