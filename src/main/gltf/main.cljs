@@ -142,11 +142,11 @@
 (defn- update-game-state [old-state time-delta]
   (-> old-state
       (update :camera camera/update-camera @input-devices/input-state time-delta)
-      (update :scene scene/update-transforms)
       (as->
        state
        (update state :grab-tool update-grab-tool (:scene state) (:camera state) time-delta)
-        (update state :scene update-scene state))))
+        (update state :scene update-scene state))
+      (update :scene scene/update-transforms)))
 
 (defn- main-loop [time]
   (let [time-seconds (/ time 1000)
