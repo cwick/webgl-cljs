@@ -135,8 +135,11 @@
   (let [grab-tool (:grab-tool game-state)]
     (if-let [node-id (and (:grabbing? grab-tool)
                           (:grab-node-id grab-tool))]
-      (scene/update-node old-scene node-id assoc :position
-                         (mat4/mult-vec3 (:world-matrix (-> game-state :camera)) (:grab-point grab-tool)))
+      ; TODO manage dirty flag automatically?
+      (scene/update-node old-scene node-id assoc
+                         :position
+                         (mat4/mult-vec3 (:world-matrix (-> game-state :camera)) (:grab-point grab-tool))
+                         :dirty? true)
       old-scene)))
 
 (defn- update-game-state [old-state time-delta]

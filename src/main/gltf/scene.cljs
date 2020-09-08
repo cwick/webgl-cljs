@@ -17,7 +17,8 @@
      :scale (vec3/create 1 1 1)}
     data
     {:id (swap! auto-id inc)
-     :children []})))
+     :children []
+     :dirty? true})))
 
 (defn create []
   (let [node (create-node)]
@@ -52,10 +53,6 @@
         (add-child (root scene) new-root-id)
         (add-child (root other) new-root-id))))
 
-(def no-translation (vec3/create))
-(def no-rotation (quat/create-identity))
-(def no-scale (vec3/create 1 1 1))
-
 ; Note: Calling delay directly in the node update function
 ; causes massive memory leaks, somehow related to
 ; creating anonymous functions in JS and stuff being retained in
@@ -64,7 +61,15 @@
 (defn- lazy-scale [t] (delay (mat4/get-scale t)))
 (defn- lazy-rotation [t] (delay (mat4/get-rotation t)))
 
-(defn- update-node-transforms [scene nodes parent-transform node]
+(declare update-node-transforms)
+(defn- continue-node-updates [scene scene-nodes parent-transform children]
+  (reduce
+   #(update-node-transforms
+     scene %1 parent-transform %2)
+   scene-nodes
+   children))
+
+(defn- force-update-node-transforms [scene nodes parent-transform node]
   (let [global-transform
         (mat4/mult-mat parent-transform (mat4/create-rotation-translation-scale
                                          (:rotation node)
@@ -86,13 +91,19 @@
                     (assoc! :global-transform global-transform
                             :global-position global-position
                             :global-scale global-scale
-                            :global-rotation global-rotation)
+                            :global-rotation global-rotation
+                            :dirty? false)
                     (persistent!)))]
     (reduce
-     #(update-node-transforms
+     #(force-update-node-transforms
        scene %1 global-transform %2)
      updated-nodes
      (children scene node))))
+
+(defn- update-node-transforms [scene nodes parent-transform node]
+  (if (:dirty? node)
+    (force-update-node-transforms scene nodes parent-transform node)
+    (continue-node-updates scene nodes (:global-transform node) (children scene node))))
 
 (defn update-transforms [scene]
   (let [nodes
