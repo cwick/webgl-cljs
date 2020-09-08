@@ -15,8 +15,7 @@
 (defonce app-state (r/atom {}))
 
 (defonce game-state
-  (atom {:camera (camera/create)
-         :grab-tool {:grabbing? false
+  (atom {:grab-tool {:grabbing? false
                      :controller (input/create-controller
                                   [(input/map-axis "grabbing?" input/leading-edge-button-axis
                                                    [:keyboard :buttons "KeyG"])])}
@@ -91,14 +90,16 @@
                :material material}]}})))
 
 (def default-scene (-> (scene/create)
-                       (scene/add-child (create-floor-node))))
+                       (scene/add-child (create-floor-node))
+                       (assoc :camera (camera/create))))
 
 (defn- load-model [gltf base-url]
   (swap! app-state assoc :gltf gltf)
   (-> (gltf.loader/load-gltf gltf base-url)
       (.then (fn [scene]
-               (swap! game-state assoc
-                      :scene (scene/merge-scene default-scene scene))))))
+               (swap! game-state update
+                      :scene #(-> (scene/merge-scene default-scene scene)
+                                  (assoc :camera (:camera %))))))))
 
 (defn ^:dev/after-load start []
   (gl/recompile-shaders)
@@ -111,10 +112,6 @@
    [ui/SelectModel {:on-select load-model}]
    [datafrisk/DataFriskShell
     (:gltf @state)]])
-
-(defn- draw-scene []
-  (gl/set-view-matrix! (get-in @game-state [:camera :view-matrix]))
-  (gl/draw (:scene @game-state)))
 
 ; TODO need to convert from local to global and back again when grabbing
 (defn- update-grab-tool [old-grab scene camera time-delta]
@@ -132,24 +129,28 @@
       grab)))
 
 (defn- update-scene [old-scene game-state]
-  (let [grab-tool (:grab-tool game-state)]
+  (let [grab-tool (:grab-tool game-state)
+        camera (-> game-state :scene :camera)]
     (if-let [node-id (and (:grabbing? grab-tool)
                           (:grab-node-id grab-tool))]
       ; TODO manage dirty flag automatically?
       (scene/update-node old-scene node-id assoc
                          :position
-                         (mat4/mult-vec3 (:world-matrix (-> game-state :camera)) (:grab-point grab-tool))
+                         (mat4/mult-vec3 (:world-matrix camera) (:grab-point grab-tool))
                          :dirty? true)
       old-scene)))
 
 (defn- update-game-state [old-state time-delta]
-  (-> old-state
-      (update :camera camera/update-camera @input-devices/input-state time-delta)
-      (as->
-       state
-       (update state :grab-tool update-grab-tool (:scene state) (:camera state) time-delta)
-        (update state :scene update-scene state))
-      (update :scene scene/update-transforms)))
+  (let [camera (camera/update-camera (-> old-state :scene :camera)
+                                     @input-devices/input-state
+                                     time-delta)]
+    (-> old-state
+        (assoc-in [:scene :camera] camera)
+        (as->
+         state
+         (update state :grab-tool update-grab-tool (:scene state) camera time-delta)
+          (update state :scene update-scene state))
+        (update :scene scene/update-transforms))))
 
 (defn- main-loop [time]
   (let [time-seconds (/ time 1000)
@@ -160,7 +161,7 @@
       (ui/draw-benchmark
        "Update time"
        #(swap! game-state update-game-state time-delta))
-      (draw-scene))
+      (gl/draw (:scene @game-state)))
     (swap! game-state assoc :last-frame-time time-seconds)
     (input-devices/end-frame)
     (js/requestAnimationFrame main-loop)))
@@ -171,12 +172,7 @@
          #(let [rect (.-contentRect (aget % 0))
                 width (.-width rect)
                 height (.-height rect)]
-            (gl/set-projection-matrix!
-             (mat4/create-perspective
-              (* 50 (/ js/Math.PI 180)) ; fov-y
-              (/ width height) ; aspect
-              0.1 ; near
-              10000)) ; far
+            (swap! game-state assoc-in [:scene :camera :aspect] (/ width height))
             (ui/resize-canvas width height)))]
     (.observe observer canvas)))
 

@@ -50,6 +50,7 @@
         new-root-id (:id (root new-scene))]
     (-> new-scene
         (update :nodes #(merge % (:nodes scene) (:nodes other)))
+        (assoc :camera (:camera scene))
         (add-child (root scene) new-root-id)
         (add-child (root other) new-root-id))))
 

@@ -122,7 +122,15 @@
   (gmat4/scale (.-data m) x y z)
   m)
 
+(defn invert! [m]
+  (if (gmat4/invert (.-data m) (.-data m))
+    m
+    nil))
+
+(defn invert [m]
+  (invert! (clone m)))
+
 (defn data
-  "Returns a typed attay representing the underlying matrix data"
+  "Returns a typed array representing the underlying matrix data"
   [m]
   (.-data m))

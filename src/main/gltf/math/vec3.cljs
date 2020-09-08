@@ -118,3 +118,8 @@
 
 (defn mult-vec3 [v1 v2]
   (mult-vec3! (clone v1) v2))
+
+(defn data
+  "Returns a typed array representing the underlying vector data"
+  [m]
+  (.-data m))

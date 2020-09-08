@@ -2,7 +2,8 @@
                      [gltf.webgl.utils :as gl-utils]
                      [gltf.ui :as ui]
                      [gltf.scene :as scene]
-                     [gltf.math.mat4 :as mat4]))
+                     [gltf.math.mat4 :as mat4]
+                     [gltf.math.vec3 :as vec3]))
 
 (defonce gl-state (atom nil))
 
@@ -123,13 +124,21 @@
   (let [transform-location (gl-utils/get-uniform-location gl gl-state "u_transform")]
     (.uniformMatrix4fv gl transform-location false (mat4/data matrix))))
 
-(defn- bind-scene-uniforms [gl]
+(defn- bind-scene-uniforms [gl scene]
   (let [projection (gl-utils/get-uniform-location gl gl-state "u_projection")
         view (gl-utils/get-uniform-location gl gl-state "u_view")
-        texcoord-0 (gl-utils/get-uniform-location gl gl-state "u_texture0")]
+        texcoord-0 (gl-utils/get-uniform-location gl gl-state "u_texture0")
+        eyePosition (gl-utils/get-uniform-location gl gl-state "u_eyePosition")
+        camera (:camera scene)
+        projection-matrix (mat4/create-perspective
+                           (:fov-y camera)
+                           (:aspect camera)
+                           (:near camera)
+                           (:far camera))]
     (.uniform1i gl texcoord-0 0)
-    (.uniformMatrix4fv gl view false (mat4/data (:view-matrix @gl-state identity-matrix)))
-    (.uniformMatrix4fv gl projection false (mat4/data (:projection-matrix @gl-state identity-matrix)))))
+    (.uniformMatrix4fv gl view false (mat4/data (:view-matrix camera)))
+    (.uniformMatrix4fv gl projection false (mat4/data projection-matrix))
+    (.uniform3fv gl eyePosition (vec3/data (:position camera)))))
 
 (defn- draw-elements [gl primitive]
   (let [indices (:indices primitive)]
@@ -215,19 +224,13 @@
            (swap! gl-state setup-new-scene gl scene))
        (swap! gl-state dissoc :stats)
        (.clear gl (bit-or (.-DEPTH_BUFFER_BIT gl) (.-COLOR_BUFFER_BIT gl)))
-       (bind-scene-uniforms gl)
+       (bind-scene-uniforms gl scene)
        (draw-node gl scene (scene/root scene))))
     (print-debug-info)))
 
 (defn recompile-shaders []
   (when-let [gl (:gl @gl-state)]
     (gl-utils/recompile-shaders gl gl-state)))
-
-(defn set-view-matrix! [m]
-  (swap! gl-state assoc :view-matrix m))
-
-(defn set-projection-matrix! [m]
-  (swap! gl-state assoc :projection-matrix m))
 
 (defn init-webgl [canvas]
   (let [gl (.getContext canvas "webgl2")]
