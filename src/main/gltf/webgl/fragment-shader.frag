@@ -9,7 +9,8 @@ in vec3 worldPosition;
 in vec2 texcoord_0;
 uniform sampler2D u_texture0;
 uniform vec4 u_baseColor;
-uniform vec3 u_eyePosition;
+// TODO: start using this for specular
+//uniform vec3 u_eyePosition;
 
 vec4 gammaCorrect(vec4 c) {
   float gamma = 2.2;

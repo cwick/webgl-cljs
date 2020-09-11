@@ -13,6 +13,7 @@ uniform mat4 u_view;
 void main() {
   vec4 world = u_transform * vec4(POSITION,1);
   gl_Position = u_projection * u_view * world;
+  gl_PointSize = 20.;
   texcoord_0 = TEXCOORD_0;
   worldPosition = vec3(world);
 }

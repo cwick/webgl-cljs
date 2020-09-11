@@ -4,6 +4,7 @@
                         [gltf.loader]
                         [gltf.input-devices :as input-devices]
                         [gltf.webgl.core :as gl]
+                        [gltf.webgl.debug :as gl-debug]
                         [gltf.ui :as ui]
                         [gltf.camera :as camera]
                         [gltf.input :as input]
@@ -102,7 +103,7 @@
                                   (assoc :camera (:camera %))))))))
 
 (defn ^:dev/after-load start []
-  (gl/recompile-shaders)
+  (gl/recompile-shaders (:gl @game-state))
   (rdom/force-update-all))
 
 (defn ^:dev/before-load stop [])
@@ -161,7 +162,10 @@
       (ui/draw-benchmark
        "Update time"
        #(swap! game-state update-game-state time-delta))
-      (gl/draw (:scene @game-state)))
+      (let [gl (:gl @game-state)]
+        (gl/draw gl (:scene @game-state))
+        (gl-debug/set-camera gl (-> @game-state :scene :camera))
+        (gl-debug/point gl 0 0 0 [1.0 0 0])))
     (swap! game-state assoc :last-frame-time time-seconds)
     (input-devices/end-frame)
     (js/requestAnimationFrame main-loop)))
@@ -172,22 +176,24 @@
          #(let [rect (.-contentRect (aget % 0))
                 width (.-width rect)
                 height (.-height rect)]
-            (swap! game-state assoc-in [:scene :camera :aspect] (/ width height))
+            (swap! game-state update-in [:scene :camera] camera/set-aspect-ratio (/ width height))
             (ui/resize-canvas width height)))]
     (.observe observer canvas)))
 
 (defn init []
-  (start)
   (rdom/render
    [App app-state]
    (js/document.getElementById "app"))
 
-  (swap! game-state assoc :scene default-scene)
   (let [canvas (js/document.getElementById "canvas")
         ui-canvas (js/document.getElementById "ui-canvas")]
     (ui/init ui-canvas)
     (input-devices/init ui-canvas)
-    (gl/init-webgl canvas)
+    (let [gl (gl/init-webgl canvas)]
+      (swap! game-state assoc
+             :scene default-scene
+             :gl gl))
     (observe-canvas canvas))
 
+  (start)
   (js/requestAnimationFrame main-loop))

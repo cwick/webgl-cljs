@@ -1,16 +1,18 @@
 (ns gltf.webgl.core (:require
                      [gltf.webgl.utils :as gl-utils]
+                     [gltf.webgl.debug :as gl-debug]
                      [gltf.ui :as ui]
                      [gltf.scene :as scene]
                      [gltf.math.mat4 :as mat4]
-                     [gltf.math.vec3 :as vec3]))
+                     [shadow.resource :as rc]))
 
 (defonce gl-state (atom nil))
 
 (def identity-matrix (mat4/create-identity))
 
-(defn- init-gl-state [gl]
-  (reset! gl-state {:gl gl}))
+(def shader-sources
+  {:vertex (rc/inline "./vertex-shader.vert")
+   :fragment (rc/inline "./fragment-shader.frag")})
 
 (defn- upload-texture-image [gl image]
   ; Images must be converted from sRGB to linear space
@@ -101,7 +103,7 @@
                           :MAT3 9
                           :MAT4 16}
         buffer-view (:bufferView accessor)
-        program (gl-utils/get-gl-program gl gl-state)
+        program (gl-utils/get-gl-program (:program @gl-state))
         attribute-location (.getAttribLocation gl program attribute-name)]
     (.enableVertexAttribArray gl attribute-location)
     (.vertexAttribPointer
@@ -121,24 +123,21 @@
       (vertex-attrib-pointer gl accessor (name attribute)))))
 
 (defn- set-transform-matrix! [gl matrix]
-  (let [transform-location (gl-utils/get-uniform-location gl gl-state "u_transform")]
+  (let [program (:program @gl-state)
+        transform-location (gl-utils/get-uniform-location gl program "u_transform")]
     (.uniformMatrix4fv gl transform-location false (mat4/data matrix))))
 
 (defn- bind-scene-uniforms [gl scene]
-  (let [projection (gl-utils/get-uniform-location gl gl-state "u_projection")
-        view (gl-utils/get-uniform-location gl gl-state "u_view")
-        texcoord-0 (gl-utils/get-uniform-location gl gl-state "u_texture0")
-        eyePosition (gl-utils/get-uniform-location gl gl-state "u_eyePosition")
-        camera (:camera scene)
-        projection-matrix (mat4/create-perspective
-                           (:fov-y camera)
-                           (:aspect camera)
-                           (:near camera)
-                           (:far camera))]
+  (let [program (:program @gl-state)
+        projection (gl-utils/get-uniform-location gl program "u_projection")
+        view (gl-utils/get-uniform-location gl program "u_view")
+        texcoord-0 (gl-utils/get-uniform-location gl program "u_texture0")
+        #_#_eyePosition (gl-utils/get-uniform-location gl program "u_eyePosition")
+        camera (:camera scene)]
     (.uniform1i gl texcoord-0 0)
     (.uniformMatrix4fv gl view false (mat4/data (:view-matrix camera)))
-    (.uniformMatrix4fv gl projection false (mat4/data projection-matrix))
-    (.uniform3fv gl eyePosition (vec3/data (:position camera)))))
+    (.uniformMatrix4fv gl projection false (mat4/data (:projection-matrix camera)))
+    #_(.uniform3fv gl eyePosition (vec3/data (:position camera)))))
 
 (defn- draw-elements [gl primitive]
   (let [indices (:indices primitive)]
@@ -179,11 +178,12 @@
 
 (defn- bind-material [gl primitive]
   (bind-textures gl primitive)
-  (let [default-base-color #js[1 1 1 1]
+  (let [program (:program @gl-state)
+        default-base-color #js[1 1 1 1]
         base-color (get-in primitive
                            [:material :pbrMetallicRoughness :baseColorFactor]
                            default-base-color)
-        base-color-location (gl-utils/get-uniform-location gl gl-state "u_baseColor")]
+        base-color-location (gl-utils/get-uniform-location gl program "u_baseColor")]
     (.uniform4fv gl base-color-location base-color)))
 
 (defn- draw-primitive [gl primitive]
@@ -214,27 +214,26 @@
   (doseq [child (scene/children scene node)]
     (draw-node gl scene child)))
 
-(defn draw [scene]
-  (when-let [gl (:gl @gl-state)]
-    (ui/draw-benchmark
-     "Draw time"
-     (fn []
+(defn draw [gl scene]
+  (ui/draw-benchmark
+   "Draw time"
+   (fn []
        ; TODO free GL resources when scene nodes destroyed
-       #_(when-not (identical? scene (:scene @gl-state))
-           (swap! gl-state setup-new-scene gl scene))
-       (swap! gl-state dissoc :stats)
-       (.clear gl (bit-or (.-DEPTH_BUFFER_BIT gl) (.-COLOR_BUFFER_BIT gl)))
-       (bind-scene-uniforms gl scene)
-       (draw-node gl scene (scene/root scene))))
-    (print-debug-info)))
+     #_(when-not (identical? scene (:scene @gl-state))
+         (swap! gl-state setup-new-scene gl scene))
+     (swap! gl-state dissoc :stats)
+     (.clear gl (bit-or (.-DEPTH_BUFFER_BIT gl) (.-COLOR_BUFFER_BIT gl)))
+     (gl-utils/use-program gl (:program @gl-state))
+     (bind-scene-uniforms gl scene)
+     (draw-node gl scene (scene/root scene))))
+  (print-debug-info))
 
-(defn recompile-shaders []
-  (when-let [gl (:gl @gl-state)]
-    (gl-utils/recompile-shaders gl gl-state)))
+(defn recompile-shaders [gl]
+  (swap! gl-state update :program #(gl-utils/recompile-program! gl % shader-sources))
+  (gl-debug/recompile-shaders gl))
 
 (defn init-webgl [canvas]
   (let [gl (.getContext canvas "webgl2")]
-    (init-gl-state gl)
     (when-not gl
       (throw (js/Error. "WebGL 2.0 not available")))
     (.viewport gl
@@ -244,5 +243,7 @@
                (-> gl .-canvas .-height))
     (.clearColor gl 0 0 0 1)
     (.enable gl (.-DEPTH_TEST gl))
-    (gl-utils/recompile-shaders gl gl-state)))
+    (swap! gl-state assoc :program (gl-utils/create-program gl))
+    (recompile-shaders gl)
+    gl))
 

@@ -118,6 +118,9 @@
 (defn make-translate [x y z]
   (Mat4. (gmat4/makeTranslate (gmat4/create) x y z)))
 
+(defn make-scale [x y z]
+  (Mat4. (gmat4/makeScale (gmat4/create) x y z)))
+
 (defn scale! [m x y z]
   (gmat4/scale (.-data m) x y z)
   m)

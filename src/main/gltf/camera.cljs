@@ -106,6 +106,18 @@
            :view-matrix view-matrix
            :world-matrix world-matrix)))
 
+(defn update-projection-matrix [camera]
+  (assoc camera
+         :projection-matrix
+         (mat4/create-perspective
+          (:fov-y camera)
+          (:aspect camera)
+          (:near camera)
+          (:far camera))))
+
+(defn set-aspect-ratio [camera aspect]
+  (update-projection-matrix (assoc camera :aspect aspect)))
+
 (defn create []
   (let [force 2
         counter-force 6
