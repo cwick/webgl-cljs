@@ -4,13 +4,26 @@
 // to pick one. mediump is a good default. It means "medium precision"
 precision mediump float;
 
-out vec4 outColor;
-in vec3 worldPosition;
-in vec2 texcoord_0;
+layout(location = 0) out vec4 outColor;
+layout(location = 1) out vec3 o_depthValue;
+in vec3 v_worldPosition;
+in vec2 v_texcoord_0;
 uniform sampler2D u_texture0;
 uniform vec4 u_baseColor;
 // TODO: start using this for specular
 //uniform vec3 u_eyePosition;
+
+// ----------------------------
+// Taken from Stack Overflow
+// https://stackoverflow.com/questions/47945303/how-to-access-the-values-of-the-depth-buffer-outside-of-webgl-context
+// (I have no idea how this works)
+vec3 packDepthToRGB(float depth)
+{
+    float depthVal = depth * (256.0*256.0*256.0 - 1.0) / (256.0*256.0*256.0);
+    vec4 encode    = fract(depthVal * vec4(1.0, 256.0, 256.0*256.0, 256.0*256.0*256.0));
+    return encode.xyz - encode.yzw / 256.0 + 1.0/512.0;
+}
+// ----------------------------
 
 vec4 gammaCorrect(vec4 c) {
   float gamma = 2.2;
@@ -22,27 +35,31 @@ vec4 gammaCorrect(vec4 c) {
 } 
 
 vec3 calcNormal() {
-  vec3 xTangent = dFdx(worldPosition);
-  vec3 yTangent = dFdy(worldPosition);
+  vec3 xTangent = dFdx(v_worldPosition);
+  vec3 yTangent = dFdy(v_worldPosition);
   return normalize( cross( xTangent, yTangent ) );
 }
 
-void main() {
+float calcLightIntensity() {
   vec3 normal = calcNormal();
   vec3 lightPosition = vec3(30,10,-10);
-  vec3 lightVector = normalize(lightPosition - worldPosition);
-  float lightMultiplier = clamp(dot(lightVector, normal), 0.0, 1.0);
+  vec3 lightVector = normalize(lightPosition - v_worldPosition);
+  return clamp(dot(lightVector, normal), 0.0, 1.0);
+}
+
+void main() {
   vec3 surfaceColor = 
-    vec3(texture(u_texture0, texcoord_0)) * 
+    vec3(texture(u_texture0, v_texcoord_0)) * 
     vec3(u_baseColor);
   vec3 unlit = surfaceColor / 50.0;
 
-  // TODO: deal with alpha channel
   outColor = vec4(
     unlit +
-    lightMultiplier * surfaceColor
+    calcLightIntensity() * surfaceColor
     , 1.0);
 
   // TODO: only gamma correct if we have to
   outColor = gammaCorrect(outColor);
+  // Write depth value (0.0 - 1.0) for use in picking operations
+  o_depthValue = packDepthToRGB(gl_FragCoord.z);
 }

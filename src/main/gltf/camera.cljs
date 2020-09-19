@@ -133,7 +133,7 @@
      :forward (get-forward-vector identity-matrix)
      :fov-y (* 50 (/ js/Math.PI 180))
      :near 0.1
-     :far 10000
+     :far 1000
      :aspect 1
      :view-matrix (mat4/create-identity)
      :controller (input/create-controller

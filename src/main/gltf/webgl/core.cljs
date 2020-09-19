@@ -7,6 +7,8 @@
                      [shadow.resource :as rc]))
 
 (defonce gl-state (atom nil))
+(def CANVAS-WIDTH 1920)
+(def CANVAS-HEIGHT 1200)
 
 (def identity-matrix (mat4/create-identity))
 
@@ -214,6 +216,58 @@
   (doseq [child (scene/children scene node)]
     (draw-node gl scene child)))
 
+(defn- create-framebuffer [gl]
+  (let [framebuffer (.createFramebuffer gl)
+        color-buffer (.createRenderbuffer gl)
+        packed-depth-buffer (.createRenderbuffer gl)
+        depth-buffer (.createRenderbuffer gl)]
+    (.bindFramebuffer gl (.-FRAMEBUFFER gl) framebuffer)
+    ; Attach depth buffer
+    (.bindRenderbuffer gl (.-RENDERBUFFER gl) depth-buffer)
+    (.renderbufferStorage gl (.-RENDERBUFFER gl) (.-DEPTH_COMPONENT24 gl) CANVAS-WIDTH CANVAS-HEIGHT)
+    (.framebufferRenderbuffer gl (.-FRAMEBUFFER gl) (.-DEPTH_ATTACHMENT gl) (.-RENDERBUFFER gl) depth-buffer)
+    ; Attach color buffer
+    (.bindRenderbuffer gl (.-RENDERBUFFER gl) color-buffer)
+    (.renderbufferStorage gl (.-RENDERBUFFER gl) (.-RGBA8 gl) CANVAS-WIDTH CANVAS-HEIGHT)
+    (.framebufferRenderbuffer gl (.-FRAMEBUFFER gl) (.-COLOR_ATTACHMENT0 gl) (.-RENDERBUFFER gl) color-buffer)
+    ; Attach second color buffer (for reading back depth values)
+    (.bindRenderbuffer gl (.-RENDERBUFFER gl) packed-depth-buffer)
+    (.renderbufferStorage gl (.-RENDERBUFFER gl) (.-RGB8 gl) CANVAS-WIDTH CANVAS-HEIGHT)
+    (.framebufferRenderbuffer gl (.-FRAMEBUFFER gl) (.-COLOR_ATTACHMENT1 gl) (.-RENDERBUFFER gl) packed-depth-buffer)
+    ; Set fragment shader output locations
+    (.drawBuffers gl #js[(.-COLOR_ATTACHMENT0 gl) (.-COLOR_ATTACHMENT1 gl)])
+    ; Restore default framebuffer
+    (.bindFramebuffer gl (.-FRAMEBUFFER gl) nil)
+    framebuffer))
+
+(defn- unpack-rgb-to-depth [v]
+  (/ (+ (* (aget v 0) 256 256) (* (aget v 1) 256) (aget v 2))
+     (- (* 256 256 256) 1)))
+
+(defn- blit-framebuffer [gl]
+  ; Draw into the default canvas framebuffer
+  (.bindFramebuffer gl (.-DRAW_FRAMEBUFFER gl) nil)
+  ; Read from the framebuffer we rendered the scene into
+  (.bindFramebuffer gl (.-READ_FRAMEBUFFER gl) (:framebuffer @gl-state))
+  (.blitFramebuffer gl
+                    0 0 CANVAS-WIDTH CANVAS-HEIGHT
+                    0 0 CANVAS-WIDTH CANVAS-HEIGHT
+                    (.-COLOR_BUFFER_BIT gl) (.-NEAREST gl))
+  (let [pixels (js/Uint8Array. 4)]
+    (.readBuffer gl (.-COLOR_ATTACHMENT1 gl))
+    ; TODO: This is what reading back from the packed depth buffer would look like for picking
+    #_(.readPixels gl 0 0 1 1 (.-RGBA gl) (.-UNSIGNED_BYTE gl) pixels 0)
+    #_(ui/debug (unpack-rgb-to-depth pixels))
+    (.readBuffer gl (.-COLOR_ATTACHMENT0 gl))))
+
+(defn- clear-buffers [gl]
+  ; Normal color buffer
+  (.clearBufferfv gl (.-COLOR gl) 0 #js[0 0 0 1])
+  ; Depth buffer encoded as RGB values for picking operations
+  (.clearBufferfv gl (.-COLOR gl) 1 #js[1 1 1 1])
+  ; Real depth buffer
+  (.clearBufferfi gl (.-DEPTH_STENCIL gl) 0 1 1))
+
 (defn draw [gl scene]
   (ui/draw-benchmark
    "Draw time"
@@ -222,10 +276,12 @@
      #_(when-not (identical? scene (:scene @gl-state))
          (swap! gl-state setup-new-scene gl scene))
      (swap! gl-state dissoc :stats)
-     (.clear gl (bit-or (.-DEPTH_BUFFER_BIT gl) (.-COLOR_BUFFER_BIT gl)))
+     (.bindFramebuffer gl (.-FRAMEBUFFER gl) (:framebuffer @gl-state))
+     (clear-buffers gl)
      (gl-utils/use-program gl (:program @gl-state))
      (bind-scene-uniforms gl scene)
-     (draw-node gl scene (scene/root scene))))
+     (draw-node gl scene (scene/root scene))
+     (blit-framebuffer gl)))
   (print-debug-info))
 
 (defn recompile-shaders [gl]
@@ -233,17 +289,21 @@
   (gl-debug/recompile-shaders gl))
 
 (defn init-webgl [canvas]
-  (let [gl (.getContext canvas "webgl2")]
+  (let [gl (.getContext canvas "webgl2" #js{:antialias false})]
     (when-not gl
       (throw (js/Error. "WebGL 2.0 not available")))
+    (set! (.-width canvas) CANVAS-WIDTH)
+    (set! (.-height canvas) CANVAS-HEIGHT)
     (.viewport gl
                0
                0
                (-> gl .-canvas .-width)
                (-> gl .-canvas .-height))
-    (.clearColor gl 0 0 0 1)
     (.enable gl (.-DEPTH_TEST gl))
-    (swap! gl-state assoc :program (gl-utils/create-program gl))
-    (recompile-shaders gl)
+    (let [framebuffer (create-framebuffer gl)]
+      (swap! gl-state assoc
+             :program (gl-utils/create-program gl)
+             :framebuffer framebuffer)
+      (recompile-shaders gl))
     gl))
 
