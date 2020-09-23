@@ -252,13 +252,7 @@
   (.blitFramebuffer gl
                     0 0 CANVAS-WIDTH CANVAS-HEIGHT
                     0 0 CANVAS-WIDTH CANVAS-HEIGHT
-                    (.-COLOR_BUFFER_BIT gl) (.-NEAREST gl))
-  (let [pixels (js/Uint8Array. 4)]
-    (.readBuffer gl (.-COLOR_ATTACHMENT1 gl))
-    ; TODO: This is what reading back from the packed depth buffer would look like for picking
-    #_(.readPixels gl 0 0 1 1 (.-RGBA gl) (.-UNSIGNED_BYTE gl) pixels 0)
-    #_(ui/debug (unpack-rgb-to-depth pixels))
-    (.readBuffer gl (.-COLOR_ATTACHMENT0 gl))))
+                    (.-COLOR_BUFFER_BIT gl) (.-NEAREST gl)))
 
 (defn- clear-buffers [gl]
   ; Normal color buffer
@@ -283,6 +277,17 @@
      (draw-node gl scene (scene/root scene))
      (blit-framebuffer gl)))
   (print-debug-info))
+
+(defn pick
+  "Return depth value at given window coordinates. x,y in range [-1, 1]. Return value in range [0, 1]"
+  [gl x y]
+  (let [pixels (js/Uint8Array. 4)
+        pixel-x (* (/ (inc x) 2) CANVAS-WIDTH)
+        pixel-y (* (/ (inc y) 2) CANVAS-HEIGHT)]
+    (.readBuffer gl (.-COLOR_ATTACHMENT1 gl))
+    (.readPixels gl pixel-x pixel-y 1 1 (.-RGBA gl) (.-UNSIGNED_BYTE gl) pixels 0)
+    (.readBuffer gl (.-COLOR_ATTACHMENT0 gl))
+    (unpack-rgb-to-depth pixels)))
 
 (defn recompile-shaders [gl]
   (swap! gl-state update :program #(gl-utils/recompile-program! gl % shader-sources))

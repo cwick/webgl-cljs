@@ -96,3 +96,12 @@
         time (benchmark f args)]
     (debug (str name ": " (.toFixed (average! time state) 2) "ms"))
     (swap! benchmark-state assoc name state)))
+
+(defn draw-hud []
+  (when-let [ctx (:context @ui-state)]
+    (.beginPath ctx)
+    (.arc ctx
+          (/ (-> ctx .-canvas .-width) (* 2 js/devicePixelRatio))
+          (/ (-> ctx .-canvas .-height) (* 2 js/devicePixelRatio))
+          3 0 (* js/Math.PI 2))
+    (.fill ctx)))

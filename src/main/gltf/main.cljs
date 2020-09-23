@@ -18,7 +18,7 @@
 (defonce game-state
   (atom {:grab-tool {:grabbing? false
                      :controller (input/create-controller
-                                  [(input/map-axis "grabbing?" input/leading-edge-button-axis
+                                  [(input/map-axis "grabbing?" input/button-axis
                                                    [:keyboard :buttons "KeyG"])])}
          :last-frame-time nil}))
 
@@ -119,7 +119,7 @@
   (let [node (second (scene/children scene (scene/root scene)))
         grab (-> old-grab
                  (update :controller input/update-controller @input-devices/input-state time-delta))
-        grab-triggered? (== 1 (-> grab :controller :grabbing? :value))]
+        grab-triggered? (-> grab :controller :grabbing? :pressed?)]
     (if (and grab-triggered? node)
       (if (not (:grabbing? old-grab))
         (assoc grab
@@ -142,16 +142,15 @@
       old-scene)))
 
 (defn- update-game-state [old-state time-delta]
-  (let [camera (camera/update-camera (-> old-state :scene :camera)
-                                     @input-devices/input-state
-                                     time-delta)]
-    (-> old-state
-        (assoc-in [:scene :camera] camera)
-        (as->
-         state
-         (update state :grab-tool update-grab-tool (:scene state) camera time-delta)
-          (update state :scene update-scene state))
-        (update :scene scene/update-transforms))))
+  (as-> old-state state
+    (assoc state :input-state @input-devices/input-state)
+    (update-in state [:scene :camera]
+               camera/update-camera
+               state
+               time-delta)
+    (update state :grab-tool update-grab-tool (:scene state) (-> state :scene :camera) time-delta)
+    (update state :scene update-scene state)
+    (update state :scene scene/update-transforms)))
 
 (defn- main-loop [time]
   (let [time-seconds (/ time 1000)
@@ -164,6 +163,7 @@
        #(swap! game-state update-game-state time-delta))
       (let [gl (:gl @game-state)]
         (gl/draw gl (:scene @game-state))
+        (ui/draw-hud)
         (gl-debug/set-camera gl (-> @game-state :scene :camera))
         (gl-debug/point gl 0 0 0 [1.0 0 0])))
     (swap! game-state assoc :last-frame-time time-seconds)

@@ -1,5 +1,6 @@
 (ns gltf.input (:require
-                [gltf.math.utils :as math]))
+                [gltf.math.utils :as math]
+                [gltf.ui :as ui]))
 
 (defn create-axis [name]
   {:name name :value 0 :previous-raw-value 0})
@@ -30,10 +31,9 @@
 (defn update-axis [axis input-state time-delta]
   (let [positive-value (get-raw-input-value input-state (:positive-selector axis))
         negative-value (get-raw-input-value input-state (:negative-selector axis))
-        raw-value (- positive-value negative-value)]
-    (assoc axis
-           :value ((:map-fn axis) axis raw-value time-delta)
-           :previous-raw-value raw-value)))
+        raw-value (- positive-value negative-value)
+        new-axis ((:map-fn axis) axis raw-value time-delta)]
+    (assoc new-axis :previous-raw-value raw-value)))
 
 (defn update-controller [controller input-state time-delta]
   (persistent!
@@ -44,22 +44,24 @@
               (rest axes))
        new-controller))))
 
-(defn button-axis [_ raw-value]
-  (math/round (math/clamp raw-value 0 1)))
-
-(defn leading-edge-button-axis [axis raw-value]
+(defn button-axis [axis raw-value]
   (let [previous-raw-value (:previous-raw-value axis)]
-    (if (and (zero? previous-raw-value) (> raw-value previous-raw-value))
-      1
-      0)))
+    (assoc axis
+           :value (math/round (math/clamp raw-value 0 1))
+           :pressed? (and (zero? previous-raw-value)
+                          (not (zero? raw-value)))
+           :released? (and (not (zero? previous-raw-value))
+                           (zero? raw-value)))))
 
-(defn absolute-axis [_ raw-value]
-  (math/clamp raw-value -1 1))
+(defn absolute-axis [axis raw-value]
+  (assoc axis :value (math/clamp raw-value -1 1)))
 
-(defn raw-axis [_ raw-value] raw-value)
+(defn raw-axis [axis raw-value]
+  (assoc axis :value raw-value))
 
 (defn sensitivity [value]
-  (fn [_ raw-value] (* raw-value value)))
+  (fn [axis raw-value]
+    (assoc axis :value (* raw-value value))))
 
 (defn digital-to-absolute-axis [force counter-force]
   (fn [axis raw-value time-delta]
@@ -98,4 +100,4 @@
           (if (and (zero? raw-value) (not= (js/Math.sign new-value) (js/Math.sign previous-value)))
             0
             new-value)]
-      (math/clamp new-value -1 1))))
+      (assoc axis :value (math/clamp new-value -1 1)))))

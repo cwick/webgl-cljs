@@ -3,9 +3,10 @@
    [gltf.math.mat4 :as mat4]
    [gltf.math.vec3 :as vec3]
    [gltf.input :as input]
-   [gltf.math.utils :as math]))
+   [gltf.math.utils :as math]
+   [gltf.webgl.core :as gl]))
 
-(defn- orbit? [camera] (-> camera :controller :orbit? :value))
+(defn- orbit? [camera] (== 1 (-> camera :controller :orbit? :value)))
 (defn- pitch-delta [camera] (-> camera :controller :pitch :value))
 (defn- yaw-delta [camera] (-> camera :controller :yaw :value))
 
@@ -89,9 +90,9 @@
         ; OK for now, but need to refine camera motion while in orbit mode
         (update-fly-movement time))))
 
-(defn update-camera [camera input-state time]
+(defn update-camera [camera game-state time]
   (let [camera (as-> camera camera
-                 (update camera :controller input/update-controller input-state time)
+                 (update camera :controller input/update-controller (:input-state game-state) time)
                  (if (orbit? camera)
                    (update-orbit-movement camera time)
                    (update-fly-movement camera time)))
@@ -102,11 +103,14 @@
         world-matrix (mat4/mult-mat!
                       (mat4/make-translate x y z)
                       (:orientation camera))]
+    (when (-> camera :controller :orbit? :pressed?)
+      (println (gl/pick (:gl game-state) 0 0)))
+
     (assoc camera
            :view-matrix view-matrix
            :world-matrix world-matrix)))
 
-(defn update-projection-matrix [camera]
+(defn- update-projection-matrix [camera]
   (assoc camera
          :projection-matrix
          (mat4/create-perspective
@@ -121,7 +125,7 @@
 (defn create []
   (let [force 2
         counter-force 6
-        axis (input/digital-to-absolute-axis force counter-force)
+        absolute-axis (input/digital-to-absolute-axis force counter-force)
         mouse-sensitivity (* 0.1 (/ js/Math.PI 180))
         identity-matrix (mat4/create-identity)]
     {:yaw 0
@@ -137,13 +141,13 @@
      :aspect 1
      :view-matrix (mat4/create-identity)
      :controller (input/create-controller
-                  [(input/map-axis "right" axis
+                  [(input/map-axis "right" absolute-axis
                                    [:keyboard :buttons "KeyA"] [:keyboard :buttons "KeyD"])
 
-                   (input/map-axis "forward" axis
+                   (input/map-axis "forward" absolute-axis
                                    [:keyboard :buttons "KeyS"] [:keyboard :buttons "KeyW"])
 
-                   (input/map-axis "up" axis
+                   (input/map-axis "up" absolute-axis
                                    [:keyboard :buttons "KeyC"] [:keyboard :buttons "Space"])
 
                    (input/map-axis "yaw" (input/sensitivity mouse-sensitivity)
@@ -152,5 +156,5 @@
                    (input/map-axis "pitch" (input/sensitivity mouse-sensitivity)
                                    [:mouse :axes :relative-y])
 
-                   (input/map-axis "orbit?" #(== 1 (apply input/button-axis %&))
+                   (input/map-axis "orbit?" input/button-axis
                                    [:mouse :buttons 2])])}))
