@@ -4,7 +4,8 @@
    [gltf.math.vec3 :as vec3]
    [gltf.input :as input]
    [gltf.math.utils :as math]
-   [gltf.webgl.core :as gl]))
+   [gltf.webgl.core :as gl]
+   [gltf.ui :as ui]))
 
 (defn- orbit? [camera] (== 1 (-> camera :controller :orbit? :value)))
 (defn- pitch-delta [camera] (-> camera :controller :pitch :value))
@@ -21,7 +22,7 @@
 
 (defn- get-forward-movement-direction [camera]
   (if (orbit? camera)
-    (-> (vec3/normalize (:position camera))
+    (-> (vec3/normalize (vec3/subtract (:position camera) (:orbit-point camera)))
         (vec3/scale! -1))
     (:forward camera)))
 
@@ -30,7 +31,9 @@
         forward-velocity (-> (get-forward-movement-direction camera)
                              (vec3/scale (-> camera :controller :forward :value)))
         right-velocity (-> (:right camera)
-                           (vec3/scale (-> camera :controller :right :value)))
+                           (vec3/scale (if-not (orbit? camera)
+                                         (-> camera :controller :right :value)
+                                         0)))
         up-velocity (-> (vec3/world-up)
                         (vec3/scale! (-> camera :controller :up :value)))
         velocity (-> (vec3/add forward-velocity right-velocity up-velocity)
@@ -76,6 +79,17 @@
       (update-orientation)
       (move-camera time)))
 
+(defn- unproject [camera win-x win-y depth]
+  (let [inverse (mat4/invert! (mat4/mult-mat (:projection-matrix camera) (:view-matrix camera)))
+        win-z (- (* 2 depth) 1)]
+    (mat4/mult-vec3-projective inverse (vec3/create win-x win-y win-z))))
+
+(defn- pick-orbit-point [camera gl]
+  (if (-> camera :controller :orbit? :pressed?)
+    (let [depth (gl/pick gl 0 0)]
+      (assoc camera :orbit-point (unproject camera 0 0 depth)))
+    camera))
+
 (defn- update-orbit-movement [camera time]
   (let [pitch-delta (-
                      (constrain-pitch (+ (:pitch camera)
@@ -83,16 +97,18 @@
                      (:pitch camera))]
     (-> camera
         (update :position
-                #(-> (mat4/create-identity)
-                     (as-> m (apply mat4/rotate! m pitch-delta (:right camera)))
-                     (mat4/rotate-y! (yaw-delta camera))
-                     (mat4/mult-vec3 %)))
-        ; OK for now, but need to refine camera motion while in orbit mode
+                #(as-> (mat4/create-identity) m
+                   (apply mat4/translate! m (:orbit-point camera))
+                   (apply mat4/rotate! m pitch-delta (:right camera))
+                   (mat4/rotate-y! m (yaw-delta camera))
+                   (apply mat4/translate! m (vec3/negate (:orbit-point camera)))
+                   (mat4/mult-vec3 m %)))
         (update-fly-movement time))))
 
 (defn update-camera [camera game-state time]
   (let [camera (as-> camera camera
                  (update camera :controller input/update-controller (:input-state game-state) time)
+                 (pick-orbit-point camera (:gl game-state))
                  (if (orbit? camera)
                    (update-orbit-movement camera time)
                    (update-fly-movement camera time)))
@@ -103,9 +119,6 @@
         world-matrix (mat4/mult-mat!
                       (mat4/make-translate x y z)
                       (:orientation camera))]
-    (when (-> camera :controller :orbit? :pressed?)
-      (println (gl/pick (:gl game-state) 0 0)))
-
     (assoc camera
            :view-matrix view-matrix
            :world-matrix world-matrix)))

@@ -41,7 +41,8 @@
        (add! v3))))
 
 (defn subtract! [v1 v2]
-  (gvec3/subtract (.-data v1) (.-data v2) (.-data v1)))
+  (gvec3/subtract (.-data v1) (.-data v2) (.-data v1))
+  v1)
 
 (defn subtract [v1 v2]
   (subtract! (clone v1) v2))

@@ -99,6 +99,9 @@
 (defn mult-vec3 [m v]
   (vec3/Vec3. (gmat4/multVec3 (.-data m) (.-data v) (gvec3/create))))
 
+(defn mult-vec3-projective [m v]
+  (vec3/Vec3. (gmat4/multVec3Projective (.-data m) (.-data v) (gvec3/create))))
+
 (defn rotate! [m angle x y z]
   (gmat4/rotate (.-data m) angle x y z)
   m)
