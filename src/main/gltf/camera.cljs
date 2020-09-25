@@ -7,7 +7,10 @@
    [gltf.webgl.core :as gl]
    [gltf.ui :as ui]))
 
-(defn- orbit? [camera] (== 1 (-> camera :controller :orbit? :value)))
+(defn- orbit? [camera]
+  (and
+   (== 1 (-> camera :controller :orbit? :value))
+   (:orbit-point camera)))
 (defn- pitch-delta [camera] (-> camera :controller :pitch :value))
 (defn- yaw-delta [camera] (-> camera :controller :yaw :value))
 
@@ -26,8 +29,14 @@
         (vec3/scale! -1))
     (:forward camera)))
 
+(defn- get-speed [camera]
+  (if (orbit? camera)
+    (let [distance (vec3/distance (:position camera) (:orbit-point camera))]
+      (math/clamp distance 6 200))
+    12))
+
 (defn- update-velocity [camera]
-  (let [max-speed 12
+  (let [speed (get-speed camera)
         forward-velocity (-> (get-forward-movement-direction camera)
                              (vec3/scale (-> camera :controller :forward :value)))
         right-velocity (-> (:right camera)
@@ -35,10 +44,12 @@
                                          (-> camera :controller :right :value)
                                          0)))
         up-velocity (-> (vec3/world-up)
-                        (vec3/scale! (-> camera :controller :up :value)))
+                        (vec3/scale! (if-not (orbit? camera)
+                                       (-> camera :controller :up :value)
+                                       0)))
         velocity (-> (vec3/add forward-velocity right-velocity up-velocity)
-                     (vec3/scale! max-speed)
-                     (vec3/clamp! max-speed))]
+                     (vec3/scale! speed)
+                     (vec3/clamp! speed))]
     (assoc camera
            :velocity velocity)))
 
@@ -86,8 +97,12 @@
 
 (defn- pick-orbit-point [camera gl]
   (if (-> camera :controller :orbit? :pressed?)
-    (let [depth (gl/pick gl 0 0)]
-      (assoc camera :orbit-point (unproject camera 0 0 depth)))
+    (let [depth (gl/pick gl 0 0)
+          orbit-point
+          (if (== depth 1)
+            nil
+            (unproject camera 0 0 depth))]
+      (assoc camera :orbit-point orbit-point))
     camera))
 
 (defn- update-orbit-movement [camera time]
@@ -99,8 +114,8 @@
         (update :position
                 #(as-> (mat4/create-identity) m
                    (apply mat4/translate! m (:orbit-point camera))
-                   (apply mat4/rotate! m pitch-delta (:right camera))
                    (mat4/rotate-y! m (yaw-delta camera))
+                   (apply mat4/rotate! m pitch-delta (:right camera))
                    (apply mat4/translate! m (vec3/negate (:orbit-point camera)))
                    (mat4/mult-vec3 m %)))
         (update-fly-movement time))))
