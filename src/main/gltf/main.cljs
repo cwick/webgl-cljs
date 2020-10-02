@@ -98,9 +98,11 @@
   (swap! app-state assoc :gltf gltf)
   (-> (gltf.loader/load-gltf gltf base-url)
       (.then (fn [scene]
-               (swap! game-state update
-                      :scene #(-> (scene/merge-scene default-scene scene)
-                                  (assoc :camera (:camera %))))))))
+               (let [new-game-state
+                     (swap! game-state update
+                            :scene #(-> (scene/merge-scene default-scene scene)
+                                        (assoc :camera (:camera %))))]
+                 (swap! app-state assoc :scene (:scene new-game-state)))))))
 
 (defn ^:dev/after-load start []
   (gl/recompile-shaders (:gl @game-state))
@@ -112,7 +114,8 @@
   [:<>
    [ui/SelectModel {:on-select load-model}]
    [datafrisk/DataFriskShell
-    (:gltf @state)]])
+    (:gltf @state)
+    (:scene @state)]])
 
 ; TODO need to convert from local to global and back again when grabbing
 (defn- update-grab-tool [old-grab scene camera time-delta]
@@ -134,11 +137,9 @@
         camera (-> game-state :scene :camera)]
     (if-let [node-id (and (:grabbing? grab-tool)
                           (:grab-node-id grab-tool))]
-      ; TODO manage dirty flag automatically?
-      (scene/update-node old-scene node-id assoc
-                         :position
-                         (mat4/mult-vec3 (:world-matrix camera) (:grab-point grab-tool))
-                         :dirty? true)
+      (scene/set-position old-scene
+                          node-id
+                          (mat4/mult-vec3 (:world-matrix camera) (:grab-point grab-tool)))
       old-scene)))
 
 (defn- update-game-state [old-state time-delta]

@@ -7,6 +7,12 @@
 (defn- assoc-node [scene node]
   (assoc-in scene [:nodes (:id node)] node))
 
+(defn- assoc-node! [scene node]
+  (assoc! scene :nodes
+          (assoc! (:nodes scene)
+                  (:id node)
+                  node)))
+
 (defn create-node
   ([] (create-node nil))
 
@@ -17,12 +23,15 @@
      :scale (vec3/create 1 1 1)}
     data
     {:id (swap! auto-id inc)
-     :children []
-     :dirty? true})))
+     :children []})))
 
+(declare dirty-node)
 (defn create []
-  (let [node (create-node)]
-    {:nodes {(:id node) node} :root (:id node)}))
+  (let [root-node (create-node {:depth 0})
+        scene {:nodes {(:id root-node) root-node}
+               :root (:id root-node)}]
+    (-> scene
+        (dirty-node root-node))))
 
 (defn get-node [scene node-id]
   (if-let [node (get-in scene [:nodes node-id])]
@@ -31,19 +40,46 @@
 
 (defn root [scene] (get-node scene (:root scene)))
 
-(defn update-node [scene node-id f & args]
+(defn- update-node [scene node-id f & args]
   (assoc-node scene (apply f (get-node scene node-id) args)))
+
+(defn- dirty-node? [scene node]
+  (get-in scene [:dirty-nodes (:depth node) (:id node)]))
+
+(defn- dirty-node [scene node]
+  (update-in scene [:dirty-nodes (:depth node)] #(conj (or %1 #{}) (:id node))))
+
+(defn- clean-node! [scene node]
+  (assoc! scene :dirty-nodes
+          (update (:dirty-nodes scene) (:depth node) #(disj (or %1 #{}) (:id node)))))
+
+(defn set-position [scene node-id pos]
+  (let [new-scene (update-node scene node-id assoc
+                               :position pos)
+        node (get-node scene node-id)]
+    (dirty-node new-scene node)))
 
 (defn add-child
   ([scene child] (add-child scene child (:id (root scene))))
   ([scene child parent-id]
-   (-> scene
-       (assoc-node child)
-       (update-node parent-id
-                    update :children #(conj % (:id child))))))
+   (let [parent (get-node scene parent-id)]
+     (-> scene
+         (assoc-node (assoc child :depth (inc (:depth parent))))
+         (update-node parent-id
+                      update :children #(conj % (:id child)))))))
 
 (defn children [scene node]
   (map #(get-node scene %) (:children node)))
+
+(defn- update-depth-values
+  ([scene]
+   (update-depth-values scene (root scene) -1))
+  ([scene node parent-depth]
+   (let [depth (inc parent-depth)]
+     (reduce #(update-depth-values %1 %2 depth)
+             (update-in scene [:nodes (:id node)]
+                        assoc :depth depth)
+             (children scene node)))))
 
 (defn merge-scene [scene other]
   (let [new-scene (create)
@@ -52,66 +88,44 @@
         (update :nodes #(merge % (:nodes scene) (:nodes other)))
         (assoc :camera (:camera scene))
         (add-child (root scene) new-root-id)
-        (add-child (root other) new-root-id))))
+        (add-child (root other) new-root-id)
+        (update-depth-values))))
 
-; Note: Calling delay directly in the node update function
-; causes massive memory leaks, somehow related to
-; creating anonymous functions in JS and stuff being retained in
-; the closure.
-(defn- lazy-translation [t] (delay (mat4/get-translation t)))
-(defn- lazy-scale [t] (delay (mat4/get-scale t)))
-(defn- lazy-rotation [t] (delay (mat4/get-rotation t)))
+(defn- update-node-transforms
+  ([scene node] (update-node-transforms scene node (mat4/create-identity)))
+  ([scene node parent-transform]
+   (let [global-transform
+         (mat4/mult-mat parent-transform (mat4/create-rotation-translation-scale
+                                          (:rotation node)
+                                          (:position node)
+                                          (:scale node)))
+         updated-scene
+         (-> scene
+             (assoc-node!
+              (assoc node :global-transform global-transform))
+             (clean-node! node))]
+     (reduce
+      #(update-node-transforms %1 %2 global-transform)
+      updated-scene
+      (children scene node)))))
 
-(declare update-node-transforms)
-(defn- continue-node-updates [scene scene-nodes parent-transform children]
-  (reduce
-   #(update-node-transforms
-     scene %1 parent-transform %2)
-   scene-nodes
-   children))
-
-(defn- force-update-node-transforms [scene nodes parent-transform node]
-  (let [global-transform
-        (mat4/mult-mat parent-transform (mat4/create-rotation-translation-scale
-                                         (:rotation node)
-                                         (:position node)
-                                         (:scale node)))
-
-        global-position
-        (lazy-translation global-transform)
-
-        global-scale
-        (lazy-scale global-transform)
-
-        global-rotation
-        (lazy-rotation global-transform)
-
-        updated-nodes
-        (assoc! nodes (:id node)
-                (-> (transient node)
-                    (assoc! :global-transform global-transform
-                            :global-position global-position
-                            :global-scale global-scale
-                            :global-rotation global-rotation
-                            :dirty? false)
-                    (persistent!)))]
-    (reduce
-     #(force-update-node-transforms
-       scene %1 global-transform %2)
-     updated-nodes
-     (children scene node))))
-
-(defn- update-node-transforms [scene nodes parent-transform node]
-  (if (:dirty? node)
-    (force-update-node-transforms scene nodes parent-transform node)
-    (continue-node-updates scene nodes (:global-transform node) (children scene node))))
+(defn- update-nodes [scene node-ids]
+  (reduce (fn [scene node-id]
+            (let [node (get-node scene node-id)]
+              (if (dirty-node? scene node)
+                (update-node-transforms scene node)
+                scene)))
+          scene
+          node-ids))
 
 (defn update-transforms [scene]
-  (let [nodes
-        (update-node-transforms
-         scene
-         (transient (:nodes scene))
-         (mat4/create-identity)
-         (root scene))]
-    (assoc scene :nodes (persistent! nodes))))
+  (let [transient-scene
+        (assoc! (transient scene) :nodes (transient (:nodes scene)))
 
+        new-scene
+        (reduce-kv (fn [scene _ node-ids] (update-nodes scene node-ids))
+                   transient-scene
+                   (:dirty-nodes scene))]
+    (-> new-scene
+        (assoc! :nodes (persistent! (:nodes new-scene)))
+        (persistent!))))
